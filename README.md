@@ -75,7 +75,7 @@ https://github.com/facebook/hhvm/
 ext_session.so will be saved to /etc/hhvm/
 
 #### 2.
-add "hhvm.extensions[hhvm_stemmer] = ext_session.so" -> /etc/hhvm/php.ini and /etc/hhvm/server.ini
+add "hhvm.extensions[ext_session] = ext_session.so" -> /etc/hhvm/php.ini and /etc/hhvm/server.ini
 
 #### 3.
 Service HHVM restart
