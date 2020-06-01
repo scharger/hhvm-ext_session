@@ -84,8 +84,9 @@ Service HHVM restart
 ## Usage:
 
 ### Additional ini options:
-
+```
 session.memcache_host (Default = "localhost")
 session.memcache_port (Default = "11211")
+```
 
 https://www.php.net/manual/en/book.session.php
