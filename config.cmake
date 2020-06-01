@@ -1,4 +1,3 @@
-project(ext_session)
+HHVM_EXTENSION(ext_session ext_session.cpp)
+HHVM_SYSTEMLIB(ext_session ext_ext_session.php)
 
-HHVM_EXTENSION(ext_session ext_session.cpp ext_session.h)
-HHVM_SYSTEMLIB(ext_session ext_session.php)

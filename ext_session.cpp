@@ -121,7 +121,7 @@ namespace HPHP {
 		int64_t hash_bits_per_character{0};
 	};
 
-	const StaticString s_session_ext_name("session");
+	const StaticString s_session_ext_name("ext_session");
 
 	struct SessionRequestData final : Session {
 		void init() {
@@ -885,13 +885,13 @@ namespace HPHP {
 
 	///////////////////////////////////////////////////////////////////////////////
 
-	static int64_t HHVM_FUNCTION(session_status) {
+	int64_t HHVM_FUNCTION(session_status) {
 		return s_session->session_status;
 	}
 
 	const StaticString s_session_write_close("session_write_close");
 
-	static String HHVM_FUNCTION(session_id, const Variant& newid /* = null_string */) {
+	String HHVM_FUNCTION(session_id, const Variant& newid /* = null_string */) {
 		String ret = s_session->id;
 		if (ret.isNull()) {
 			ret = empty_string();
@@ -902,7 +902,7 @@ namespace HPHP {
 		return ret;
 	}
 
-	static Variant HHVM_FUNCTION(session_encode) {
+	Variant HHVM_FUNCTION(session_encode) {
 		String ret = php_session_encode();
 		if (ret.isNull()) {
 			return false;
@@ -910,7 +910,7 @@ namespace HPHP {
 		return ret;
 	}
 
-	static bool HHVM_FUNCTION(session_decode, const String& data) {
+	bool HHVM_FUNCTION(session_decode, const String& data) {
 		if (s_session->session_status != Session::None) {
 			php_session_decode(data);
 			return true;
@@ -922,7 +922,7 @@ namespace HPHP {
 		s_REQUEST_URI("REQUEST_URI"),
 		s_HTTP_REFERER("HTTP_REFERER");
 
-	static bool HHVM_FUNCTION(session_start) {
+	bool HHVM_FUNCTION(session_start) {
 		s_session->apply_trans_sid = s_session->use_trans_sid;
 		String value;
 		
@@ -1037,11 +1037,11 @@ namespace HPHP {
 		return true;
 	}
 
-	static bool HHVM_FUNCTION(session_destroy) {
+	bool HHVM_FUNCTION(session_destroy) {
 		return php_session_destroy();
 	}
 
-	static void HHVM_FUNCTION(session_unset) {
+	void HHVM_FUNCTION(session_unset) {
 		if (s_session->session_status == Session::None) {
 			return;
 		}
@@ -1049,7 +1049,7 @@ namespace HPHP {
 		return;
 	}
 
-	static void HHVM_FUNCTION(session_write_close) {
+	void HHVM_FUNCTION(session_write_close) {
 		if (s_session->session_status == Session::Active) {
 			s_session->session_status = Session::None;
 			php_session_save_current_state();

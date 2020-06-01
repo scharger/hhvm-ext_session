@@ -19,126 +19,6 @@
 */
 
 
-namespace {
-  /**
-   * SessionHandler a special class that can be used to expose the current
-   * internal PHP session save handler by inheritance. There are six methods
-   * which wrap the six internal session save handler callbacks (open, close,
-   * read, write, destroy and gc). By default, this class will wrap whatever
-   * internal save handler is set as as defined by the session.save_handler
-   * configuration directive which is usually files by default. Other internal
-   * session save handlers are provided by PHP extensions such as SQLite (as
-   * sqlite), Memcache (as memcache), and Memcached (as memcached).   When a
-   * plain instance of SessionHandler is set as the save handler using
-   * session_set_save_handler() it will wrap the current save handlers. A class
-   * extending from SessionHandler allows you to override the methods or
-   * intercept or filter them by calls the parent class methods which ultimately
-   * wrap the interal PHP session handlers.   This allows you, for example, to
-   * intercept the read and write methods to encrypt/decrypt the session data
-   * and then pass the result to and from the parent class. Alternatively one
-   * might chose to entirely override a method like the garbage collection
-   * callback gc.   Because the SessionHandler wraps the current internal save
-   * handler methods, the above example of encryption can be applied to any
-   * internal save handler without having to know the internals of the handlers.
-   *   To use this class, first set the save handler you wish to expose using
-   * session.save_handler and then pass an instance of SessionHandler or one
-   * extending it to session_set_save_handler().   Please note the callback
-   * methods of this class are designed to be called internally by PHP and are
-   * not meant to be called from user-space code. The return values are equally
-   * processed internally by PHP. For more information on the session workflow,
-   * please refer session_set_save_handler().
-   */
-  class SessionHandler {
-    <<__Native, __HipHopSpecific>>
-    private function hhclose(): bool;
-
-    /**
-     * Close the session
-     *
-     * @return bool -
-     */
-    public function close() {
-      return $this->hhclose();
-    }
-
-    <<__Native, __HipHopSpecific>>
-    private function hhdestroy(string $session_id): bool;
-
-    /**
-     * Destroy a session
-     *
-     * @param string $session_id - The session ID being destroyed.
-     *
-     * @return bool -
-     */
-    public function destroy($session_id) {
-      return $this->hhdestroy($session_id);
-    }
-
-   <<__Native, __HipHopSpecific>>
-    private function hhgc(int $maxlifetime): bool;
-
-    /**
-     * Cleanup old sessions
-     *
-     * @param int $maxlifetime -
-     *
-     * @return bool -
-     */
-    public function gc($maxlifetime) {
-      return $this->hhgc($maxlifetime);
-    }
-
-    <<__Native, __HipHopSpecific>>
-    private function hhopen(string $save_path, string $session_id): bool;
-
-    /**
-     * Initialize session
-     *
-     * @param string $save_path -
-     * @param string $session_id -
-     *
-     * @return bool -
-     */
-    public function open($save_path, $session_id) {
-      return $this->hhopen($save_path, $session_id);
-    }
-
-
-    <<__Native, __HipHopSpecific>>
-    private function hhread(string $session_id): ?string;
-
-    /**
-     * Read session data
-     *
-     * @param string $session_id -
-     *
-     * @return string - Returns an encoded string of the read data. If
-     *   nothing was read, it must return an empty string. Note this value is
-     *   returned internally to PHP for processing.
-     */
-    public function read($session_id) {
-      return $this->hhread($session_id);
-    }
-
-
-    <<__Native, __HipHopSpecific>>
-    private function hhwrite(string $session_id, string $data): bool;
-
-    /**
-     * Write session data
-     *
-     * @param string $session_id -
-     * @param string $session_data -
-     *
-     * @return bool -
-     */
-    public function write($session_id, $session_data) {
-      return $this->hhwrite($session_id, $session_data);
-    }
-
-  } // Class
-
   /**
    * Return current cache expire
    *
@@ -388,7 +268,124 @@ namespace {
   <<__Native>>
   function session_write_close(): void;
   
-  
+/**
+   * SessionHandler a special class that can be used to expose the current
+   * internal PHP session save handler by inheritance. There are six methods
+   * which wrap the six internal session save handler callbacks (open, close,
+   * read, write, destroy and gc). By default, this class will wrap whatever
+   * internal save handler is set as as defined by the session.save_handler
+   * configuration directive which is usually files by default. Other internal
+   * session save handlers are provided by PHP extensions such as SQLite (as
+   * sqlite), Memcache (as memcache), and Memcached (as memcached).   When a
+   * plain instance of SessionHandler is set as the save handler using
+   * session_set_save_handler() it will wrap the current save handlers. A class
+   * extending from SessionHandler allows you to override the methods or
+   * intercept or filter them by calls the parent class methods which ultimately
+   * wrap the interal PHP session handlers.   This allows you, for example, to
+   * intercept the read and write methods to encrypt/decrypt the session data
+   * and then pass the result to and from the parent class. Alternatively one
+   * might chose to entirely override a method like the garbage collection
+   * callback gc.   Because the SessionHandler wraps the current internal save
+   * handler methods, the above example of encryption can be applied to any
+   * internal save handler without having to know the internals of the handlers.
+   *   To use this class, first set the save handler you wish to expose using
+   * session.save_handler and then pass an instance of SessionHandler or one
+   * extending it to session_set_save_handler().   Please note the callback
+   * methods of this class are designed to be called internally by PHP and are
+   * not meant to be called from user-space code. The return values are equally
+   * processed internally by PHP. For more information on the session workflow,
+   * please refer session_set_save_handler().
+   */
+  class SessionHandler {
+    <<__Native, __HipHopSpecific>>
+    private function hhclose(): bool;
+
+    /**
+     * Close the session
+     *
+     * @return bool -
+     */
+    public function close() {
+      return $this->hhclose();
+    }
+
+    <<__Native, __HipHopSpecific>>
+    private function hhdestroy(string $session_id): bool;
+
+    /**
+     * Destroy a session
+     *
+     * @param string $session_id - The session ID being destroyed.
+     *
+     * @return bool -
+     */
+    public function destroy($session_id) {
+      return $this->hhdestroy($session_id);
+    }
+
+   <<__Native, __HipHopSpecific>>
+    private function hhgc(int $maxlifetime): bool;
+
+    /**
+     * Cleanup old sessions
+     *
+     * @param int $maxlifetime -
+     *
+     * @return bool -
+     */
+    public function gc($maxlifetime) {
+      return $this->hhgc($maxlifetime);
+    }
+
+    <<__Native, __HipHopSpecific>>
+    private function hhopen(string $save_path, string $session_id): bool;
+
+    /**
+     * Initialize session
+     *
+     * @param string $save_path -
+     * @param string $session_id -
+     *
+     * @return bool -
+     */
+    public function open($save_path, $session_id) {
+      return $this->hhopen($save_path, $session_id);
+    }
+
+
+    <<__Native, __HipHopSpecific>>
+    private function hhread(string $session_id): ?string;
+
+    /**
+     * Read session data
+     *
+     * @param string $session_id -
+     *
+     * @return string - Returns an encoded string of the read data. If
+     *   nothing was read, it must return an empty string. Note this value is
+     *   returned internally to PHP for processing.
+     */
+    public function read($session_id) {
+      return $this->hhread($session_id);
+    }
+
+
+    <<__Native, __HipHopSpecific>>
+    private function hhwrite(string $session_id, string $data): bool;
+
+    /**
+     * Write session data
+     *
+     * @param string $session_id -
+     * @param string $session_data -
+     *
+     * @return bool -
+     */
+    public function write($session_id, $session_data) {
+      return $this->hhwrite($session_id, $session_data);
+    }
+
+  } // Class
   
 final class MemcacheSessionModule {
 	private \Memcache $mc;
@@ -446,9 +443,6 @@ final class MemcacheSessionModule {
 		return $this->mc->set($sessionId, $data, MEMCACHE_COMPRESSED, ini_get('session.gc_maxlifetime'));
 	}
 }
-  
-  
-} // Namespace (global)
 
 
 namespace __SystemLib {
