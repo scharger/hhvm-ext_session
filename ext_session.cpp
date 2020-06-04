@@ -65,8 +65,7 @@ namespace HPHP {
 	///////////////////////////////////////////////////////////////////////////////
 	using std::string;
 
-	static bool ini_on_update_save_handler(const std::string& value);
-	static std::string ini_get_save_handler();
+	static bool ini_set_save_handler();
 
 	static bool ini_on_update_save_dir(const std::string& value);
 	static bool mod_is_open();
@@ -82,43 +81,55 @@ namespace HPHP {
 			Active
 		};
 
-		std::string save_path;
+		std::string 		save_path;
 		bool				reset_save_path{false};
-		std::string memcache_host;
-		std::string memcache_port;
-		std::string session_name;
-		std::string extern_referer_chk;
-		std::string entropy_file;
-		int64_t		 entropy_length{0};
-		std::string cache_limiter;
-		int64_t		 cookie_lifetime{0};
-		std::string cookie_path;
-		std::string cookie_domain;
-		Status			session_status{None};
+		std::string 		save_handler_str;
+		
+		std::string 		crypto_cookie_time_user_key;
+		std::string 		use_crypto_storage_user_key;
+		std::string 		use_crypto_storage;
+		std::string 		crypto_secret;
+		std::string 		digest_algo;
+		std::string 		cipher_algo;
+		std::string 		cipher_keylen;
+		std::string 		crypto_expire;
+		std::string 		memcache_persistent;
+		std::string 		memcache_host;
+		std::string 		memcache_port;
+		std::string 		session_name;
+		std::string 		extern_referer_chk;
+		std::string 		entropy_file;
+		int64_t		 		entropy_length{0};
+		std::string 		cache_limiter;
+		int64_t		 		cookie_lifetime{0};
+		std::string 		cookie_path;
+		std::string 		cookie_domain;
+		Status				session_status{None};
 		bool				cookie_secure{false};
 		bool				cookie_httponly{false};
 		bool				mod_data{false};
 		bool				mod_user_implemented{false};
 
-		SessionModule* mod{nullptr};
+		SessionModule* 		mod{nullptr};
 
-		int64_t	gc_probability{0};
-		int64_t	gc_divisor{0};
-		int64_t	gc_maxlifetime{0};
-		int64_t	cache_expire{0};
+		int64_t				gc_probability{0};
+		int64_t				gc_divisor{0};
+		int64_t				gc_maxlifetime{0};
+		int64_t				cache_expire{0};
 
-		Object ps_session_handler;
-		SessionSerializer* serializer;
+		Object 				ps_session_handler;
+		SessionSerializer* 	serializer;
 
-		bool auto_start{false};
-		bool use_cookies{false};
-		bool use_only_cookies{false};
-		bool use_trans_sid{false}; // contains INI value of whether to use trans-sid
-		bool apply_trans_sid{false}; // whether to enable trans-sid for current req
-		bool send_cookie{false};
-		bool define_sid{false};
+		bool 				invalid_session_id{false};
+		bool 				auto_start{false};
+		bool 				use_cookies{false};
+		bool 				use_only_cookies{false};
+		bool 				use_trans_sid{false}; // contains INI value of whether to use trans-sid
+		bool 				apply_trans_sid{false}; // whether to enable trans-sid for current req
+		bool 				send_cookie{false};
+		bool 				define_sid{false};
 
-		int64_t hash_bits_per_character{0};
+		int64_t 			hash_bits_per_character{0};
 	};
 
 	const StaticString s_session_ext_name("ext_session");
@@ -359,17 +370,14 @@ namespace HPHP {
 		return obj;
 	}
 
-	bool SystemlibSessionModule::open(const char *save_path, const char *session_name, const char *memcache_host, const char *memcache_port) {
+	bool SystemlibSessionModule::open(const char *save_path, const char *session_name) {
 		const auto& obj = getObject();
 
 		Variant savePath = String(save_path, CopyString);
 		Variant sessionName = String(session_name, CopyString);
-		
-		Variant memcacheHost = String(memcache_host, CopyString);
-		Variant memcachePort = String(memcache_port, CopyString);
-		
-		TypedValue args[4] = { *savePath.toCell(), *sessionName.toCell(), *memcacheHost.toCell() , *memcachePort.toCell() };
-		auto ret = Variant::attach(g_context->invokeFuncFew(m_open, obj.get(), nullptr, 4, args));
+	
+		TypedValue args[2] = { *savePath.toCell(), *sessionName.toCell() };
+		auto ret = Variant::attach(g_context->invokeFuncFew(m_open, obj.get(), nullptr, 2, args));
 
 		if (ret.isBoolean() && ret.toBoolean()) {
 			s_session->mod_data = true;
@@ -462,6 +470,350 @@ namespace HPHP {
 		raise_warning("Failed calling %s::gc()", m_classname);
 		return false;
 	}
+	
+	//////////////////////////////////////////////////////////////////////////////
+	// FileSessionModule
+
+	struct FileSessionData {
+	  FileSessionData() : m_fd(-1), m_dirdepth(0), m_st_size(0), m_filemode(0600) {
+	  }
+
+	  bool open(const char* save_path, const char* session_name) {
+		String tmpdir;
+		if (*save_path == '\0') {
+		  tmpdir = HHVM_FN(sys_get_temp_dir)();
+		  save_path = tmpdir.data();
+		}
+
+		/* split up input parameter */
+		const char *argv[3];
+		int argc = 0;
+		const char *last = save_path;
+		const char *p = strchr(save_path, ';');
+		while (p) {
+		  argv[argc++] = last; last = ++p; p = strchr(p, ';');
+		  if (argc > 1) break;
+		}
+		argv[argc++] = last;
+
+		if (argc > 1) {
+		  errno = 0;
+		  m_dirdepth = (size_t) strtol(argv[0], nullptr, 10);
+		  if (errno == ERANGE) {
+			raise_warning("The first parameter in session.save_path is invalid");
+			return false;
+		  }
+		}
+
+		if (argc > 2) {
+		  errno = 0;
+		  m_filemode = strtol(argv[1], nullptr, 8);
+		  if (errno == ERANGE || m_filemode < 0 || m_filemode > 07777) {
+			raise_warning("The second parameter in session.save_path is invalid");
+			return false;
+		  }
+		}
+
+		save_path = argv[argc - 1];
+		if (File::TranslatePath(save_path).empty()) {
+		  raise_warning("Unable to open save_path %s", save_path);
+		  return false;
+		}
+
+		m_fd = -1;
+		m_basedir = save_path;
+		s_session->mod_data = true;
+		return true;
+	  }
+
+	  bool close() {
+		closeImpl();
+		m_lastkey.clear();
+		m_basedir.clear();
+		s_session->mod_data = false;
+		return true;
+	  }
+
+	  bool read(const char *key, String &value) {
+		openImpl(key);
+		if (m_fd < 0) {
+		  return false;
+		}
+
+		struct stat sbuf;
+		if (fstat(m_fd, &sbuf)) {
+		  return false;
+		}
+		m_st_size = sbuf.st_size;
+		if (m_st_size == 0) {
+		  value = "";
+		  return true;
+		}
+
+		String s = String(m_st_size, ReserveString);
+		char *val = s.mutableData();
+
+		lseek(m_fd, 0, SEEK_SET);
+		long n = ::read(m_fd, val, m_st_size);
+
+		if (n != (int)m_st_size) {
+		  if (n == -1) {
+			raise_warning("read failed: %s (%d)", folly::errnoStr(errno).c_str(),
+						  errno);
+		  } else {
+				raise_warning("read returned less bytes than requested");
+		  }
+		  return false;
+		}
+
+		value = s.setSize(m_st_size);
+		return true;
+	  }
+
+	  bool write(const char *key, const String& value) {
+		openImpl(key);
+		if (m_fd < 0) {
+		  return false;
+		}
+
+		struct stat sbuf;
+		if (fstat(m_fd, &sbuf)) {
+		  return false;
+		}
+		m_st_size = sbuf.st_size;
+
+		/*
+		 * truncate file, if the amount of new data is smaller than
+		 * the existing data set.
+		 */
+		if (value.size() < (int)m_st_size) {
+		  if (ftruncate(m_fd, 0) < 0) {
+			raise_warning("truncate failed: %s (%d)",
+						  folly::errnoStr(errno).c_str(), errno);
+			return false;
+		  }
+		}
+
+		lseek(m_fd, 0, SEEK_SET);
+		long n = ::write(m_fd, value.data(), value.size());
+
+		if (n != value.size()) {
+		  if (n == -1) {
+			raise_warning("write failed: %s (%d)",
+						  folly::errnoStr(errno).c_str(), errno);
+		  } else {
+			raise_warning("write wrote less bytes than requested");
+		  }
+		  return false;
+		}
+
+		return true;
+	  }
+
+	  bool destroy(const char *key) {
+		char buf[PATH_MAX];
+		if (!createPath(buf, sizeof(buf), key)) {
+		  return false;
+		}
+
+		if (m_fd != -1) {
+		  closeImpl();
+		  if (unlink(buf) == -1) {
+			/* This is a little safety check for instances when we are dealing
+			   with a regenerated session that was not yet written to disk */
+			if (!access(buf, F_OK)) {
+			  return false;
+			}
+		  }
+		}
+
+		return true;
+	  }
+
+	  bool gc(int maxlifetime, int *nrdels) {
+		/* we don't perform any cleanup, if dirdepth is larger than 0.
+		   we return true, since all cleanup should be handled by
+		   an external entity (i.e. find -ctime x | xargs rm) */
+		if (m_dirdepth == 0) {
+		  *nrdels = CleanupDir(m_basedir.c_str(), maxlifetime);
+		}
+		return true;
+	  }
+
+	private:
+	  int m_fd;
+	  std::string m_lastkey;
+	  std::string m_basedir;
+	  size_t m_dirdepth;
+	  size_t m_st_size;
+	  int m_filemode;
+
+	  /* If you change the logic here, please also update the error message in
+	   * ps_files_open() appropriately */
+	  static bool IsValid(const char *key) {
+		const char *p; char c;
+		bool ret = true;
+		for (p = key; (c = *p); p++) {
+		  /* valid characters are a..z,A..Z,0..9 */
+		  if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+				|| (c >= '0' && c <= '9') || c == ',' || c == '-')) {
+			ret = false;
+			break;
+		  }
+		}
+		size_t len = p - key;
+		if (len == 0) {
+		  ret = false;
+		}
+		return ret;
+	  }
+
+	#define FILE_PREFIX "sess_"
+
+	  bool createPath(char *buf, size_t buflen, const char *key) {
+		size_t key_len = strlen(key);
+		if (key_len <= m_dirdepth ||
+			buflen < (m_basedir.size() + 2 * m_dirdepth + key_len +
+					  5 + sizeof(FILE_PREFIX))) {
+		  return false;
+		}
+
+		const char *p = key;
+		int n = m_basedir.size();
+		memcpy(buf, m_basedir.c_str(), n);
+		buf[n++] = PHP_DIR_SEPARATOR;
+		for (int i = 0; i < (int)m_dirdepth; i++) {
+		  buf[n++] = *p++;
+		  buf[n++] = PHP_DIR_SEPARATOR;
+		}
+		memcpy(buf + n, FILE_PREFIX, sizeof(FILE_PREFIX) - 1);
+		n += sizeof(FILE_PREFIX) - 1;
+		memcpy(buf + n, key, key_len);
+		n += key_len;
+		buf[n] = '\0';
+
+		return true;
+	  }
+
+	  void closeImpl() {
+		if (m_fd != -1) {
+		  ::close(m_fd);
+		  m_fd = -1;
+		}
+	  }
+
+	  void openImpl(const char *key) {
+		if (m_fd < 0 || !m_lastkey.empty() || m_lastkey != key) {
+		  m_lastkey.clear();
+		  closeImpl();
+
+		  if (!IsValid(key)) {
+			raise_warning("The session id contains illegal characters, "
+						  "valid characters are a-z, A-Z, 0-9 and '-,'");
+			s_session->invalid_session_id = true;
+			return;
+		  }
+
+		  char buf[PATH_MAX];
+		  if (!createPath(buf, sizeof(buf), key)) {
+			return;
+		  }
+
+		  m_lastkey = key;
+		  m_fd = ::open(buf, O_CREAT | O_RDWR | 0, m_filemode);
+
+		  if (m_fd != -1) {
+			flock(m_fd, LOCK_EX);
+
+	#ifdef F_SETFD
+	# ifndef FD_CLOEXEC
+	#  define FD_CLOEXEC 1
+	# endif
+			if (fcntl(m_fd, F_SETFD, FD_CLOEXEC)) {
+			  raise_warning("fcntl(%d, F_SETFD, FD_CLOEXEC) failed: %s (%d)",
+							m_fd, folly::errnoStr(errno).c_str(), errno);
+			}
+	#endif
+		  } else {
+			raise_warning("open(%s, O_RDWR) failed: %s (%d)", buf,
+						  folly::errnoStr(errno).c_str(), errno);
+		  }
+		}
+	  }
+
+	  static int CleanupDir(const char *dirname, int maxlifetime) {
+		DIR *dir = opendir(dirname);
+		if (!dir) {
+		  raise_notice("ps_files_cleanup_dir: opendir(%s) failed: %s (%d)",
+					   dirname, folly::errnoStr(errno).c_str(), errno);
+		  return 0;
+		}
+
+		time_t now;
+		time(&now);
+
+		size_t dirname_len = strlen(dirname);
+		char dentry[sizeof(struct dirent) + PATH_MAX];
+		struct dirent *entry = (struct dirent *) &dentry;
+		struct stat sbuf;
+		int nrdels = 0;
+
+		/* Prepare buffer (dirname never changes) */
+		char buf[PATH_MAX];
+		memcpy(buf, dirname, dirname_len);
+		buf[dirname_len] = PHP_DIR_SEPARATOR;
+
+		while (readdir_r(dir, (struct dirent *)dentry, &entry) == 0 && entry) {
+		  /* does the file start with our prefix? */
+		  if (!strncmp(entry->d_name, FILE_PREFIX, sizeof(FILE_PREFIX) - 1)) {
+			size_t entry_len = strlen(entry->d_name);
+
+			/* does it fit into our buffer? */
+			if (entry_len + dirname_len + 2 < PATH_MAX) {
+			  /* create the full path.. */
+			  memcpy(buf + dirname_len + 1, entry->d_name, entry_len);
+
+			  /* NUL terminate it and */
+			  buf[dirname_len + entry_len + 1] = '\0';
+
+			  /* check whether its last access was more than maxlifet ago */
+			  if (stat(buf, &sbuf) == 0 && (now - sbuf.st_mtime) > maxlifetime) {
+				unlink(buf);
+				nrdels++;
+			  }
+			}
+		  }
+		}
+
+		closedir(dir);
+		return nrdels;
+	  }
+	};
+	RDS_LOCAL(FileSessionData, s_file_session_data);
+
+	struct FileSessionModule : SessionModule {
+	  FileSessionModule() : SessionModule("files") {
+	  }
+	  bool open(const char *save_path, const char *session_name) override {
+		return s_file_session_data->open(save_path, session_name);
+	  }
+	  bool close() override {
+		return s_file_session_data->close();
+	  }
+	  bool read(const char *key, String &value) override {
+		return s_file_session_data->read(key, value);
+	  }
+	  bool write(const char *key, const String& value) override {
+		return s_file_session_data->write(key, value);
+	  }
+	  bool destroy(const char *key) override {
+		return s_file_session_data->destroy(key);
+	  }
+	  bool gc(int maxlifetime, int *nrdels) override {
+		return s_file_session_data->gc(maxlifetime, nrdels);
+	  }
+	};
+	static FileSessionModule s_file_session_module;
 
 	//////////////////////////////////////////////////////////////////////////////
 	// SystemlibSessionModule implementations
@@ -555,18 +907,12 @@ namespace HPHP {
 		return s_session->mod_data || s_session->mod_user_implemented;
 	}
 
-	static bool ini_on_update_save_handler(const std::string& value) {
-		if (!session_check_active_state()) return false;
-		s_session->mod = SessionModule::Find(value.c_str());
-		return true;
-	}
-
-	static std::string ini_get_save_handler() {
-		auto &mod = s_session->mod;
-		if (mod == nullptr) {
-			return "";
+	static bool ini_set_save_handler() {
+		if (!session_check_active_state()) {
+			return false;
 		}
-		return mod->getName();
+		s_session->mod = SessionModule::Find(s_session->save_handler_str.c_str());
+		return true;
 	}
 
 	static bool ini_on_update_trans_sid(const bool& /*value*/) {
@@ -635,9 +981,7 @@ namespace HPHP {
 		/* Open session handler first */
 		if (!s_session->mod->open(
 				s_session->save_path.c_str(), 
-				s_session->session_name.c_str(), 
-				s_session->memcache_host.c_str(), 
-				s_session->memcache_port.c_str()
+				s_session->session_name.c_str()
 			)
 		) {
 			raise_error("Failed to initialize storage module: %s (path: %s)", s_session->mod->getName(), s_session->save_path.c_str());
@@ -889,16 +1233,14 @@ namespace HPHP {
 		return s_session->session_status;
 	}
 
-	const StaticString s_session_write_close("session_write_close");
-
 	String HHVM_FUNCTION(session_id, const Variant& newid /* = null_string */) {
 		String ret = s_session->id;
-		if (ret.isNull()) {
+		/*if (ret.isNull()) {
 			ret = empty_string();
 		}
 		if (!newid.isNull()) {
 			s_session->id = newid.toString();
-		}
+		}*/
 		return ret;
 	}
 
@@ -1056,11 +1398,6 @@ namespace HPHP {
 		}
 	}
 
-	void ext_session_request_shutdown() {
-		HHVM_FN(session_write_close)();
-		s_session->requestShutdownImpl();
-	}
-
 	///////////////////////////////////////////////////////////////////////////////
 
 	class ext_sessionExtension : public Extension {
@@ -1089,74 +1426,100 @@ namespace HPHP {
 			s_session.getCheck();
 			Extension* ext = ExtensionRegistry::get(s_session_ext_name);
 			assertx(ext);
-			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.memcache_host", "localhost", &s_session->memcache_host);
-			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.memcache_port", "11211", &s_session->memcache_port);
-						 
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.name",					"SESSION_ID",
-											 &s_session->session_name);
+				"session.save_path",               "",
+				IniSetting::SetAndGet<std::string>(
+					ini_on_update_save_dir, nullptr
+				),
+				&s_session->save_path);
+			Variant v;
+			if (IniSetting::GetSystem("session.save_path", v) && !v.toString().empty()) {
+				s_session->reset_save_path = true;
+			}
+
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.crypto_cookie_time_user_key", "2592000", &s_session->crypto_cookie_time_user_key);
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.use_crypto_storage_user_key", "0", &s_session->use_crypto_storage_user_key);
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.use_crypto_storage", "0", &s_session->use_crypto_storage);
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.crypto_secret", "X", &s_session->crypto_secret);
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.digest_algo", "sha256", &s_session->digest_algo);
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.cipher_algo", "aes-256-ctr", &s_session->cipher_algo);
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.cipher_keylen", "32", &s_session->cipher_keylen);
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.crypto_expire", "2592000", &s_session->crypto_expire);
+			
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, 
+											"session.memcache_persistent", 		"0", 
+											&s_session->memcache_persistent);
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, 
+											"session.memcache_host", 			"localhost", 
+											&s_session->memcache_host);
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, 
+											"session.memcache_port", 			"11211", 
+											&s_session->memcache_port);
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, 
+											"session.save_handler", 			"files", 
+											&s_session->save_handler_str);
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, 
+											"session.name", 					"SESSION_ID", 
+											&s_session->session_name);
+			
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.save_handler",			"memcache",
-											 IniSetting::SetAndGet<std::string>(
-												 ini_on_update_save_handler, ini_get_save_handler
-											 ));
+											"session.auto_start",				"0",
+											&s_session->auto_start);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.auto_start",				"0",
-											 &s_session->auto_start);
+											"session.gc_probability",			"1",
+											&s_session->gc_probability);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.gc_probability",			"1",
-											 &s_session->gc_probability);
+											"session.gc_divisor",				"100",
+											&s_session->gc_divisor);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.gc_divisor",				"100",
-											 &s_session->gc_divisor);
+											"session.gc_maxlifetime",			"1440",
+											&s_session->gc_maxlifetime);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.gc_maxlifetime",			"1440",
-											 &s_session->gc_maxlifetime);
+											"session.cookie_lifetime",			"0",
+											&s_session->cookie_lifetime);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.cookie_lifetime",			"0",
-											 &s_session->cookie_lifetime);
+											"session.cookie_path",				"/",
+											&s_session->cookie_path);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.cookie_path",				"/",
-											 &s_session->cookie_path);
+											"session.cookie_domain",			"",
+											&s_session->cookie_domain);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.cookie_domain",			"",
-											 &s_session->cookie_domain);
+											"session.cookie_secure",			"",
+											&s_session->cookie_secure);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.cookie_secure",			"",
-											 &s_session->cookie_secure);
+											"session.cookie_httponly",			"",
+											&s_session->cookie_httponly);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.cookie_httponly",			"",
-											 &s_session->cookie_httponly);
+											"session.use_cookies",				"1",
+											&s_session->use_cookies);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.use_cookies",				"1",
-											 &s_session->use_cookies);
+											"session.use_only_cookies",			"1",
+											&s_session->use_only_cookies);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.use_only_cookies",		"1",
-											 &s_session->use_only_cookies);
+											"session.referer_check",			"",
+											&s_session->extern_referer_chk);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.referer_check",			"",
-											 &s_session->extern_referer_chk);
+											"session.entropy_file",				"",
+											&s_session->entropy_file);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.entropy_file",			"",
-											 &s_session->entropy_file);
+											"session.entropy_length",			"0",
+											&s_session->entropy_length);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.entropy_length",			"0",
-											 &s_session->entropy_length);
+											"session.cache_limiter",			"nocache",
+											&s_session->cache_limiter);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.cache_limiter",			"nocache",
-											 &s_session->cache_limiter);
+											"session.cache_expire",				"180",
+											&s_session->cache_expire);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.cache_expire",			"180",
-											 &s_session->cache_expire);
+											"session.use_trans_sid",			"0",
+											IniSetting::SetAndGet<bool>(
+												ini_on_update_trans_sid, nullptr
+											),
+											&s_session->use_trans_sid);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.use_trans_sid",			"0",
-											 IniSetting::SetAndGet<bool>(
-												 ini_on_update_trans_sid, nullptr
-											 ),
-											 &s_session->use_trans_sid);
-			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-											 "session.hash_bits_per_character", "4",
-											 &s_session->hash_bits_per_character);
+											"session.hash_bits_per_character", "4",
+											&s_session->hash_bits_per_character);			
+			ini_set_save_handler();
 		}
 
 		void threadShutdown() override {
@@ -1165,6 +1528,11 @@ namespace HPHP {
 
 		void requestInit() override {
 			s_session->init();
+		}
+		
+		void requestShutdown() override {
+			HHVM_FN(session_write_close)();
+			s_session->requestShutdownImpl();
 		}
 	} s_ext_session_extension;
 

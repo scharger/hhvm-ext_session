@@ -5,7 +5,7 @@ Only memcache storage method exists.
 ### Tested with HHVM 4.8 and 3.27
 
 ## Description
-Port ext_session from HHVM 4.3. Only memcache saving handler left.
+Port ext_session from HHVM 4.3. Only "memcache" and "files" saving handler left.
 
 ## Installation:
 
@@ -83,10 +83,54 @@ Service HHVM restart
 
 ## Usage:
 
-### Additional ini options:
-```
-session.memcache_host (Default = "localhost")
-session.memcache_port (Default = "11211")
-```
+### function
+session_cache_expire
+session_cache_limiter
+session_commit
+session_decode
+session_destroy
+session_encode
+session_get_cookie_params
+session_id - limited to only get session id (for Crypto support)
+session_name - limited to only get session name (for Crypto support)
+session_register_shutdown
+session_set_cookie_params
+session_start
+session_status
+session_unset
+session_write_close
+
+#### new functions to get/set $_SESSION global variable data
+session_set(string $key, mixed $value) : void
+session_get(string $key) : mixed
+session_isset(string $key) : bool
+session_remove(string $key) : void
+
+### interfaces
+SessionHandlerInterface
+
+### Handler Modules
+MemcacheSessionModule
+
+### Additional
+class Crypto(string $crypto_secret)
+public function decrypt(string $id, string $data) : string
+public function encrypt(string $id, string $data) : string
 
 https://www.php.net/manual/en/book.session.php
+
+### Additional ini options:
+```
+session.memcache_persistent (Default = "0")
+session.memcache_host 		(Default = "localhost")
+session.memcache_port 		(Default = "11211")
+
+session.crypto_cookie_time_user_key	(Default = "2592000") (time() + sec.)
+session.use_crypto_storage_user_key	(Default = "0")
+session.use_crypto_storage			(Default = "0")
+session.crypto_secret				(Default = "X") !should be changed if session.use_crypto_storage == 1!
+session.digest_algo					(Default = "sha256")
+session.cipher_algo					(Default = "aes-256-ctr")
+session.cipher_keylen				(Default = "32")
+session.crypto_expire				(Default = "2592000")
+```

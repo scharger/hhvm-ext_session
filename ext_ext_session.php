@@ -1,5 +1,271 @@
 <?hh // partial
 /*
+-------------------------Crypto-------------------------
+MIT License
+
+Copyright (c) 2017 Vladislav Yarmak
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Update by Artūras Kaukėnas
+*/
+
+final class Crypto {
+	private string $secret;
+	private string $digest_algo;
+	private string $cipher_algo;
+	private int $expire;
+	private int $cipher_keylen;
+	private mixed $digest_len;
+    private mixed $cipher_ivlen;
+    private $overwritten = array();
+    private $opened = false;
+	
+	const string UINT32_LE_PACK_CODE       	=   "V";
+	const int UINT32_SIZE               	=   4;
+	const int RFC2965_COOKIE_SIZE      		=   4096;
+	const int MIN_OVERHEAD_PER_COOKIE   	=   3;
+	const int METADATA_SIZE             	=   4; //UINT32_SIZE;
+
+    public function __construct(string $crypto_secret) : bool {
+		if ($crypto_secret is bool) {
+			throw new \Exception("Crypto Session failed. crypto_secret not specified");
+			return false;
+		}
+		
+		$crypto_secret = (string) $crypto_secret;
+        if (!$crypto_secret ?? false) {
+            throw new \Exception("Crypto Session failed. crypto_secret wrong");
+			return false;
+        }
+        $this->secret = $crypto_secret;
+		/////////////////////////////////////////////////////
+		
+		$digest_algo = \ini_get("session.digest_algo");
+		if ($digest_algo is bool) {
+			throw new \Exception("Crypto Session failed. session.digest_algo not specified");
+			return false;
+		}
+		
+		$digest_algo = (string) $digest_algo;
+        if (!\in_array($digest_algo, \hash_algos())) {
+			throw new \Exception("Crypto Session failed. session.digest_algo wrong");
+			return false;
+        }
+        $this->digest_algo = $digest_algo;
+		/////////////////////////////////////////////////////
+		
+		$cipher_algo = \ini_get("session.cipher_algo");
+		if ($cipher_algo is bool) {
+			throw new \Exception("Crypto Session failed. session.cipher_algo not specified");
+			return false;
+		}
+		
+		$cipher_algo = (string) $cipher_algo;
+        if (!\in_array($cipher_algo, \openssl_get_cipher_methods(true))) {
+			throw new \Exception("Crypto Session failed. session.cipher_algo wrong");
+			return false;
+        }
+        $this->cipher_algo = $cipher_algo;
+		/////////////////////////////////////////////////////
+		
+		$cipher_keylen = \ini_get("session.cipher_keylen");
+		if ($cipher_keylen is bool) {
+			throw new \Exception("Crypto Session failed. session.cipher_keylen not specified");
+			return false;
+		}
+		
+		$cipher_keylen = (int) $cipher_keylen;
+		if ($cipher_keylen < 1) {
+            throw new \Exception("Crypto Session failed. session.cipher_keylen wrong");
+        }
+        $this->cipher_keylen = $cipher_keylen;
+		/////////////////////////////////////////////////////
+		
+		$expire = \ini_get("session.crypto_expire");
+		if ($expire is bool) {
+			throw new \Exception("Crypto Session failed. session.crypto_expire not specified");
+			return false;
+		}
+		
+		$expire = (int) $expire;
+		if ($expire < 1) {
+            throw new \Exception("Crypto Session failed. session.crypto_expire wrong");
+        }
+        $this->expire = $expire;
+		/////////////////////////////////////////////////////
+		
+		$this->digest_len = \strlen(\hash($this->digest_algo, "", true));
+        $this->cipher_ivlen = \openssl_cipher_iv_length($this->cipher_algo);
+		
+        if (($this->digest_len === false) || ($this->cipher_ivlen === false)) {
+			throw new \Exception("Crypto Session failed. session.digest_algo OR/AND session.cipher_algo wrong");
+		}
+		
+		return true;
+    }
+	
+	public function decrypt(string $id, string $input) : string {
+		$input = $this->base64_urlsafe_decode($input);
+		if ($input === false) {
+			return "";
+		}
+		
+		$digest = \substr($input, 0, $this->digest_len);
+		if ($digest === false) {
+			return "";
+		}
+
+		$message = \substr($input, $this->digest_len);
+		if ($message === false) {
+			return "";
+		}
+
+        if (!
+			$this->hash_equals(
+				\hash_hmac($this->digest_algo, $id.$message, $this->secret, true),
+				$digest
+			)
+		) {
+            return "";
+        }
+
+        $valid_till_bin = \substr($message, 0, self::METADATA_SIZE);
+        $valid_till_tmp = \unpack(self::UINT32_LE_PACK_CODE, $valid_till_bin);
+		
+		if (!isset($valid_till_tmp[1])) {
+			return "";
+		}
+		
+		$valid_till = (int) $valid_till_tmp[1];
+		
+
+        if (\time() > $valid_till) {
+            return "";
+        }
+
+        $iv = \substr($message, self::METADATA_SIZE, $this->cipher_ivlen);
+        $ciphertext = \substr($message, self::METADATA_SIZE + $this->cipher_ivlen);
+
+        $key = $this->pbkdf2($this->digest_algo, $this->secret, $id.$valid_till_bin, 1, $this->cipher_keylen, true);
+        $data = \openssl_decrypt($ciphertext, $this->cipher_algo, $key, \OPENSSL_RAW_DATA, $iv);
+        if ($data === false) {
+            throw new \Exception("Session data decrypt failed. OpenSSL error.");
+        }
+
+        return $data;
+	}
+	
+	public function encrypt(string $id, string $data) {
+        $expires = \time() + $this->expire;
+        $valid_till_bin = \pack(self::UINT32_LE_PACK_CODE, $expires);
+
+        $iv = \openssl_random_pseudo_bytes($this->cipher_ivlen);
+        $key = $this->pbkdf2($this->digest_algo, $this->secret, $id.$valid_till_bin, 1, $this->cipher_keylen, true);
+
+        $ciphertext = \openssl_encrypt($data, $this->cipher_algo, $key, \OPENSSL_RAW_DATA, $iv);
+        if ($ciphertext === false) {
+            throw new \Exception("Session data encrypt failed. OpenSSL error.");
+        }
+
+        $meta = $valid_till_bin;
+        $message = $meta.$iv.$ciphertext;
+
+        $digest = \hash_hmac($this->digest_algo, $id.$message, $this->secret, true);
+        $output = $this->base64_urlsafe_encode($digest.$message);
+
+		return $output;
+	}
+	
+	private function hash_equals(string $a, string $b) : bool {
+		$ret = strlen($a) ^ strlen($b);
+		$ret |= array_sum(unpack("C*", $a^$b));
+		return !$ret;
+	}
+	
+	private function base64_urlsafe_encode(string $input) : string {
+        return strtr(base64_encode($input), array("+" => "-", "/" => "_", "=" => ""));
+    }
+
+    private function base64_urlsafe_decode(string $input) : string {
+        $translated = strtr($input, array("-" => "+", "_" => "/"));
+        $padded = str_pad($translated, ( (int)((strlen($input) + 3) / 4) ) * 4, "=", STR_PAD_RIGHT);
+        return base64_decode($padded);
+    }
+
+    /*
+     * PBKDF2 key derivation function as defined by RSA's PKCS #5: https://www.ietf.org/rfc/rfc2898.txt
+     * $algorithm - The hash algorithm to use. Recommended: SHA256
+     * $password - The password.
+     * $salt - A salt that is unique to the password.
+     * $count - Iteration count. Higher is better, but slower. Recommended: At least 1000.
+     * $key_length - The length of the derived key in bytes.
+     * $raw_output - If true, the key is returned in raw binary format. Hex encoded otherwise.
+     * Returns: A $key_length-byte key derived from the password and salt.
+     *
+     * Test vectors can be found here: https://www.ietf.org/rfc/rfc6070.txt
+     *
+     * This implementation of PBKDF2 was originally created by https://defuse.ca
+     * With improvements by http://www.variations-of-shadow.com
+     */
+    private function pbkdf2(string $algorithm, string $password, string $salt, int $count, int $key_length, bool $raw_output = false) {
+        $algorithm = \strtolower($algorithm);
+        if(!\in_array($algorithm, \hash_algos(), true)) {
+            \trigger_error('PBKDF2 ERROR: Invalid hash algorithm.', \E_USER_ERROR);
+		}
+        if (($count <= 0) || ($key_length <= 0)) {
+            \trigger_error('PBKDF2 ERROR: Invalid parameters.', \E_USER_ERROR);
+		}
+        if (\function_exists("hash_pbkdf2")) {
+            // The output length is in NIBBLES (4-bits) if $raw_output is false!
+            if (!$raw_output) {
+                $key_length = $key_length * 2;
+            }
+            return \hash_pbkdf2($algorithm, $password, $salt, $count, $key_length, $raw_output);
+        }
+
+        $hash_length = \strlen(\hash($algorithm, "", true));
+        $block_count = \ceil($key_length / $hash_length);
+
+        $output = "";
+        for($i = 1; $i <= $block_count; $i++) {
+            // $i encoded as 4 bytes, big endian.
+            $last = $salt . \pack("N", $i);
+            // first iteration
+            $last = $xorsum = \hash_hmac($algorithm, $last, $password, true);
+            // perform the other $count - 1 iterations
+            for ($j = 1; $j < $count; $j++) {
+                $xorsum ^= ($last = \hash_hmac($algorithm, $last, $password, true));
+            }
+            $output .= $xorsum;
+        }
+
+        if($raw_output) {
+            return \substr($output, 0, $key_length);
+        } else {
+				return \bin2hex(\substr($output, 0, $key_length));
+		}
+    }
+}
+
+/*
+-------------------------ext_session-------------------------
    +----------------------------------------------------------------------+
    | HipHop for PHP                                                       |
    +----------------------------------------------------------------------+
@@ -112,45 +378,21 @@
   }
 
   /**
-   * Get and/or set the current session id
-   *
-   * @param string $id - If id is specified, it will replace the current
-   *   session id. session_id() needs to be called before session_start() for
-   *   that purpose. Depending on the session handler, not all characters are
-   *   allowed within the session id. For example, the file session handler
-   *   only allows characters in the range a-z A-Z 0-9 , (comma) and -
-   *   (minus)!    When using session cookies, specifying an id for
-   *   session_id() will always send a new cookie when session_start() is
-   *   called, regardless if the current session id is identical to the one
-   *   being set.
-   *
+   * Get current session id
    * @return string - session_id() returns the session id for the current
    *   session or the empty string ("") if there is no current session (no
    *   current session id exists).
    */
-  <<__Native>>
-  function session_id(?string $id = null): string;
+	<<__Native>>
+	function session_id(?string $id = null): string;
 
   /**
-   * Get and/or set the current session name
-   *
-   * @param string $name - The session name references the name of the
-   *   session, which is used in cookies and URLs (e.g. PHPSESSID). It should
-   *   contain only alphanumeric characters; it should be short and
-   *   descriptive (i.e. for users with enabled cookie warnings). If name is
-   *   specified, the name of the current session is changed to its value.
-   *    The session name can't consist of digits only, at least one letter
-   *   must be present. Otherwise a new session id is generated every time.
-   *
+   * Get the current session name
    * @return string - Returns the name of the current session.
    */
-  function session_name(mixed $name = null): string {
-    $oldname = (string)ini_get('session.name');
-    if ($name !== null) {
-      ini_set('session.name', (string)$name);
-    }
-    return $oldname;
-  }
+	function session_name(mixed $name = null): string {
+		return (string)ini_get('session.name');
+	}
 
   /**
    * Session shutdown function
@@ -159,32 +401,6 @@
    */
   function session_register_shutdown(): void {
     register_shutdown_function('session_write_close');
-  }
-
-  /**
-   * Get and/or set the current session save path
-   *
-   * @param string $path - Session data path. If specified, the path to
-   *   which data is saved will be changed. session_save_path() needs to be
-   *   called before session_start() for that purpose.     On some operating
-   *   systems, you may want to specify a path on a filesystem that handles
-   *   lots of small files efficiently. For example, on Linux, reiserfs may
-   *   provide better performance than ext2fs.
-   *
-   * @return string - Returns the path of the current directory used for
-   *   data storage.
-   */
-  function session_save_path(mixed $path = null): mixed {
-    if ($path !== null) {
-      $path = (string)$path;
-      if (strpos($path, "\0") !== false) {
-        trigger_error('The save_path cannot contain NULL characters',
-                      E_WARNING);
-        return false;
-      }
-      ini_set('session.save_path', $path);
-    }
-    return ini_get('session.save_path');
   }
 
   /**
@@ -268,138 +484,63 @@
   <<__Native>>
   function session_write_close(): void;
   
-/**
-   * SessionHandler a special class that can be used to expose the current
-   * internal PHP session save handler by inheritance. There are six methods
-   * which wrap the six internal session save handler callbacks (open, close,
-   * read, write, destroy and gc). By default, this class will wrap whatever
-   * internal save handler is set as as defined by the session.save_handler
-   * configuration directive which is usually files by default. Other internal
-   * session save handlers are provided by PHP extensions such as SQLite (as
-   * sqlite), Memcache (as memcache), and Memcached (as memcached).   When a
-   * plain instance of SessionHandler is set as the save handler using
-   * session_set_save_handler() it will wrap the current save handlers. A class
-   * extending from SessionHandler allows you to override the methods or
-   * intercept or filter them by calls the parent class methods which ultimately
-   * wrap the interal PHP session handlers.   This allows you, for example, to
-   * intercept the read and write methods to encrypt/decrypt the session data
-   * and then pass the result to and from the parent class. Alternatively one
-   * might chose to entirely override a method like the garbage collection
-   * callback gc.   Because the SessionHandler wraps the current internal save
-   * handler methods, the above example of encryption can be applied to any
-   * internal save handler without having to know the internals of the handlers.
-   *   To use this class, first set the save handler you wish to expose using
-   * session.save_handler and then pass an instance of SessionHandler or one
-   * extending it to session_set_save_handler().   Please note the callback
-   * methods of this class are designed to be called internally by PHP and are
-   * not meant to be called from user-space code. The return values are equally
-   * processed internally by PHP. For more information on the session workflow,
-   * please refer session_set_save_handler().
-   */
-  class SessionHandler {
-    <<__Native, __HipHopSpecific>>
-    private function hhclose(): bool;
-
-    /**
-     * Close the session
-     *
-     * @return bool -
-     */
-    public function close() {
-      return $this->hhclose();
-    }
-
-    <<__Native, __HipHopSpecific>>
-    private function hhdestroy(string $session_id): bool;
-
-    /**
-     * Destroy a session
-     *
-     * @param string $session_id - The session ID being destroyed.
-     *
-     * @return bool -
-     */
-    public function destroy($session_id) {
-      return $this->hhdestroy($session_id);
-    }
-
-   <<__Native, __HipHopSpecific>>
-    private function hhgc(int $maxlifetime): bool;
-
-    /**
-     * Cleanup old sessions
-     *
-     * @param int $maxlifetime -
-     *
-     * @return bool -
-     */
-    public function gc($maxlifetime) {
-      return $this->hhgc($maxlifetime);
-    }
-
-    <<__Native, __HipHopSpecific>>
-    private function hhopen(string $save_path, string $session_id): bool;
-
-    /**
-     * Initialize session
-     *
-     * @param string $save_path -
-     * @param string $session_id -
-     *
-     * @return bool -
-     */
-    public function open($save_path, $session_id) {
-      return $this->hhopen($save_path, $session_id);
-    }
-
-
-    <<__Native, __HipHopSpecific>>
-    private function hhread(string $session_id): ?string;
-
-    /**
-     * Read session data
-     *
-     * @param string $session_id -
-     *
-     * @return string - Returns an encoded string of the read data. If
-     *   nothing was read, it must return an empty string. Note this value is
-     *   returned internally to PHP for processing.
-     */
-    public function read($session_id) {
-      return $this->hhread($session_id);
-    }
-
-
-    <<__Native, __HipHopSpecific>>
-    private function hhwrite(string $session_id, string $data): bool;
-
-    /**
-     * Write session data
-     *
-     * @param string $session_id -
-     * @param string $session_data -
-     *
-     * @return bool -
-     */
-    public function write($session_id, $session_data) {
-      return $this->hhwrite($session_id, $session_data);
-    }
-
-  } // Class
+	function session_set(string $key, mixed $value) : void {
+		$session_var = \HH\global_get("_SESSION");
+		$session_var[$key] = $value;
+		\HH\global_set("_SESSION", $session_var);
+	}
   
-final class MemcacheSessionModule {
+	function session_get($key) : mixed {
+		$session_var = \HH\global_get("_SESSION");
+		return $session_var[$key];
+	}
+	
+	function session_isset($key) : bool {
+		return isset(\HH\global_get("_SESSION")[$key]);
+	}
+	
+	function session_remove($key) : void {
+		$session_var = \HH\global_get("_SESSION");
+		unset($session_var[$key]);
+		\HH\global_set("_SESSION", $session_var);
+	}
+  
+interface SessionHandlerInterface {
+	public function close() : bool;
+	public function destroy(string $sessionId) : bool;
+	public function gc(mixed $maxLifetime) : bool;
+	public function open(string $savePath, mixed $name) : bool;
+	public function read(mixed $sessionId) : mixed;
+	public function write(mixed $sessionId, mixed $data) : bool;
+}
+  
+final class MemcacheSessionModule implements SessionHandlerInterface {
 	private \Memcache $mc;
-	public bool $connected = false;
+	private $cryptoStorage;
+	private $cryptoStorage_user_key;
+	private bool $use_crypto_storage = false;
+	private string $crypto_secret = "X";
+	
+	private bool $use_crypto_storage_user_key = false;
+	private string $crypto_secret_user_key = "X";
+	
+	private bool $openCalled = false;
+	private bool $connected = false;
+	
+	private int $gc_maxlifetime = 10;
 
 	public function close() : bool {
+		if (!$this->connected) {
+			return true;
+		}
 		$this->mc->close();
-		$this->mc = null;
+		$this->connected = false;
 		return true;
 	}
 
 	public function destroy(string $sessionId) : bool {
 		if (!$this->connected) {
-			return;
+			return true;
 		}
 		
 		$this->mc->delete($sessionId);
@@ -410,102 +551,170 @@ final class MemcacheSessionModule {
 		return true;
 	}
   
-	public function open(string $savePath, mixed $name, string $memcacheHost = "localhost", string $memcachePort = "11211") : bool {
-		if (!$this->connected) {
-			return;
+	public function open(string $savePath, mixed $name) : bool {
+		$this->openCalled = true;
+		
+		if ($this->connected) {
+			return true;
 		}
 		
-		$port = (int) $memcachePort;
-		$this->mc = new \Memcache;
-		if ($this->mc->connect($memcacheHost, $port)) {
-			$this->connected = true;
+		$use_crypto_storage = \ini_get("session.use_crypto_storage");
+		if (!$use_crypto_storage is bool) {
+			$use_crypto_storage = (int) $use_crypto_storage;			
+			if ($use_crypto_storage == 1) {
+				$crypto_secret = \ini_get("session.crypto_secret");
+				if ($crypto_secret is bool) {
+					throw new \Exception("Session open failed. session.crypto_secret wrong or not specified");
+					return $this->connected;
+				}
+				$crypto_secret = (string) $crypto_secret;
+				
+				if ($crypto_secret == "X") {
+					throw new \Exception("Session open failed. session.crypto_secret should be changed");
+					return $this->connected;
+				}
+				
+				$this->crypto_secret = $crypto_secret;
+				$this->use_crypto_storage = true;
+			}
 		}
-		return true;
+		
+		$use_crypto_storage_user_key = \ini_get("session.use_crypto_storage_user_key");
+		if (!$use_crypto_storage_user_key is bool) {
+			$use_crypto_storage_user_key = (int) $use_crypto_storage_user_key;			
+			if ($use_crypto_storage_user_key == 1) {
+				$coockieKey = \md5("coockieKey");
+				if (!isset($_COOKIE[$coockieKey])) {
+					$crypto_secret_user_key = \bin2hex(\random_bytes(5));
+					$coockieTime = (int) \ini_get("session.crypto_cookie_time_user_key");
+					if ($coockieTime > 0) {
+						$coockieTime = (time()+$coockieTime);
+					}
+					\setcookie($coockieKey, $crypto_secret_user_key, $coockieTime);
+				} else {
+						$crypto_secret_user_key = $_COOKIE[$coockieKey];
+				}
+
+				$this->crypto_secret_user_key = \md5($crypto_secret_user_key);
+				$this->use_crypto_storage_user_key = true;
+			}
+		}
+		if ($this->use_crypto_storage) {
+			$this->cryptoStorage = new Crypto($this->crypto_secret);
+		}
+		
+		if ($this->use_crypto_storage_user_key) {
+			$this->cryptoStorage_user_key = new Crypto($this->crypto_secret_user_key);
+		}
+		
+		$host = ini_get("session.memcache_host");
+		if (is_bool($host)) {
+			throw new \Exception("Session open failed. session.memcache_host wrong or not specified");
+			return $this->connected;
+		}
+		
+		$host = (string) $host;
+		
+		$port = ini_get("session.memcache_port");
+		if (is_bool($port)) {
+			$port = null;
+		} else {
+				$port = (int) $port;
+		}
+		
+	
+		$this->mc = new \Memcache;
+		
+		$pconnectR = false;
+		$pconnect = ini_get("session.memcache_persistent");
+		if (!is_bool($pconnect)) {
+			if ((int) $pconnect == 1) {
+				$pconnectR = true;
+			}
+		}
+		
+		if ($pconnectR) {
+			$conn = $this->mc->pconnect($host, $port);
+		} else {		
+				$conn = $this->mc->connect($host, $port);
+		}
+		
+		if ($conn !== false) {
+			$this->connected = true;
+		} else {
+				throw new \Exception("Session open error. Memcache connection failed");
+		}
+		
+		$this->gc_maxlifetime = (int) ini_get('session.gc_maxlifetime');
+		
+		return $this->connected;
 	}
 
 	public function read(mixed $sessionId) : mixed {
+		if (!$this->openCalled) {
+			$this->open("", "");
+		}
+		
 		if (!$this->connected) {
-			return;
+			throw new \Exception("Session read error: (memcache not connected. SessionID:".$sessionId.")");
+			return false;
 		}
 		
 		$data = $this->mc->get($sessionId);
 		if (!$data) {
 			return "";
 		}
+		
+		if ($this->use_crypto_storage) {
+			$data = $this->cryptoStorage->decrypt($sessionId, $data);
+			if ($data == "") {
+				return "";
+			}
+			
+		}
+		if ($this->use_crypto_storage_user_key) {
+			$data = $this->cryptoStorage_user_key->decrypt($sessionId, $data);
+			if ($data == "") {
+				return "";
+			}
+		}
 		return $data;
 	}
 
-	public function write(mixed $sessionId, mixed $data) : mixed {
-		if (!$this->connected) {
-			return;
+	public function write(mixed $sessionId, mixed $data) : bool {
+		if (!$this->openCalled) {
+			$this->open("", "");
 		}
 		
-		return $this->mc->set($sessionId, $data, MEMCACHE_COMPRESSED, ini_get('session.gc_maxlifetime'));
+		if (!$this->connected) {
+			throw new \Exception("Session write error: (memcache not connected. SessionID:".$sessionId.")");
+			return false;
+		}
+		
+		$data = (string) $data;
+		
+		if ($this->use_crypto_storage) {
+			$data = $this->cryptoStorage->encrypt($sessionId, $data);
+			if ($data == "") {
+				throw new \Exception("Session write error: (encrypt error)");
+				return false;
+			}
+			
+		}
+
+		if ($this->use_crypto_storage_user_key) {
+			$data = $this->cryptoStorage_user_key->encrypt($sessionId, $data);
+			if ($data == "") {
+				throw new \Exception("Session write error: (encrypt error)");
+				return false;
+			}
+		}
+		
+		$ret = $this->mc->set($sessionId, $data, MEMCACHE_COMPRESSED, $this->gc_maxlifetime);
+		if ($ret == false) {
+			throw new \Exception("Session write error: (sessionId:".$sessionId);
+		}
+		
+		return $ret;
 	}
 }
-
-
-namespace __SystemLib {
-  <<__Native("NoInjection"), __HipHopSpecific>>
-  function session_set_save_handler(mixed $sessionhandler, bool $register_shutdown = true) : bool;
-
-  class SessionForwardingHandler {
-    private $open;
-    private $close;
-    private $read;
-    private $write;
-    private $destory;
-    private $gc;
-
-    public function __construct($open, $close, $read, $write, $destroy, $gc)  {
-      try {
-        $this->open = $this->validate($open, 1);
-        $this->close = $this->validate($close, 2);
-        $this->read = $this->validate($read, 3);
-        $this->write = $this->validate($write, 4);
-        $this->destroy = $this->validate($destroy, 5);
-        $this->gc = $this->validate($gc, 6);
-      } catch (\Exception $e) {
-        \trigger_error($e->getMessage(), \E_WARNING);
-        return false;
-      }
-    }
-
-    public function open($save_path, $session_id) {
-      if ($this->open) {
-        return \call_user_func($this->open, $save_path, $session_id);
-      }
-    }
-    public function close() {
-      if ($this->close) {
-        return \call_user_func($this->close);
-      }
-    }
-    public function read($session_id) {
-      if ($this->read) {
-        return \call_user_func($this->read, $session_id);
-      }
-    }
-    public function write($session_id, $session_data) {
-      if ($this->write) {
-        return \call_user_func($this->write, $session_id, $session_data);
-      }
-    }
-    public function destroy($session_id) {
-      if ($this->destroy) {
-        return \call_user_func($this->destroy, $session_id);
-      }
-    }
-    public function gc($maxlifetime) {
-      if ($this->gc) {
-        return \call_user_func($this->gc, $maxlifetime);
-      }
-    }
-    private function validate($func, $num) {
-      if (!\is_callable($func)) {
-        throw new \Exception("Argument $num is not a valid callback");
-      }
-      return $func;
-    }
-  } // Class
-} // Namespace (__SystemLib)
