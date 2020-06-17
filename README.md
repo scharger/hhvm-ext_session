@@ -5,7 +5,6 @@ Only memcache storage method exists.
 ## License
 
 This software source files are licensed under PHP 3.01 and MIT licenses.
-You can choose between one of them if you use this work.
 
 `SPDX-License-Identifier: PHP-3.01 AND MIT`
 
