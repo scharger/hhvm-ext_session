@@ -3,9 +3,6 @@ HHVM 4.3 modified ext_session for HHVM without ext_session.
 
 ### Tested with HHVM 4.8
 
-### Storage methods (session.save_handler)
-memcache OR file
-
 ## License
 
 This software source files are licensed under PHP 3.01 and MIT licenses.
@@ -91,7 +88,8 @@ Service HHVM restart
 
 ## Usage:
 
-### function
+### functions
+```
 session_cache_expire
 session_cache_limiter
 session_commit
@@ -107,27 +105,33 @@ session_start
 session_status
 session_unset
 session_write_close
+```
 
 #### new functions to get/set $_SESSION global variable data
+```
 session_set(string $key, mixed $value) : void
 session_get(string $key) : mixed
 session_isset(string $key) : bool
 session_remove(string $key) : void
+```
 
 ### interfaces
+```
 SessionHandlerInterface
+```
 
 ### Handler Modules
-MemcacheSessionModule
-
-FileSessionModule
+```
+MemcacheSessionModule -> session.save_handler = memcache
+FileSessionModule -> session.save_handler = file
+```
 
 ### Additional
+```
 class Crypto(string $crypto_secret)
-
 public function decrypt(string $id, string $data) : string
-
 public function encrypt(string $id, string $data) : string
+```
 
 https://www.php.net/manual/en/book.session.php
 
