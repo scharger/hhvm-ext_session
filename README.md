@@ -137,16 +137,16 @@ https://www.php.net/manual/en/book.session.php
 
 ### Additional ini options:
 ```
-session.memcache_persistent (Default = "0")
-session.memcache_host 		(Default = "localhost")
-session.memcache_port 		(Default = "11211")
+session.memcache_persistent 		(Default = "0")
+session.memcache_host 			(Default = "localhost")
+session.memcache_port 			(Default = "11211")
 
 session.crypto_cookie_time_user_key	(Default = "2592000") (time() + sec.)
 session.use_crypto_storage_user_key	(Default = "0")
-session.use_crypto_storage			(Default = "0")
-session.crypto_secret				(Default = "X") !should be changed if session.use_crypto_storage == 1!
-session.digest_algo					(Default = "sha256")
-session.cipher_algo					(Default = "aes-256-ctr")
-session.cipher_keylen				(Default = "32")
-session.crypto_expire				(Default = "2592000")
+session.use_crypto_storage		(Default = "0")
+session.crypto_secret			(Default = "X") !should be changed if session.use_crypto_storage == 1!
+session.digest_algo			(Default = "sha256")
+session.cipher_algo			(Default = "aes-256-ctr")
+session.cipher_keylen			(Default = "32")
+session.crypto_expire			(Default = "2592000")
 ```
