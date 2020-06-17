@@ -1,14 +1,16 @@
 # HHVM ext_session (Beta)
 Ported original HHVM ext_session from HHVM 4.3.
-Only memcache storage method exists.
+
+### Tested with HHVM 4.8
+
+### Storage methods (session.save_handler)
+memcache OR file
 
 ## License
 
 This software source files are licensed under PHP 3.01 and MIT licenses.
 
 `SPDX-License-Identifier: PHP-3.01 AND MIT`
-
-### Tested with HHVM 4.8 and 3.27
 
 ## Description
 Port ext_session from HHVM 4.3. Only "memcache" and "files" saving handler left.
