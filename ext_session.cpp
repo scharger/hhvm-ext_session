@@ -1,6 +1,6 @@
 /*
    +----------------------------------------------------------------------+
-   | HipHop for PHP                                                       |
+   | ext_session lib                                                      |
    +----------------------------------------------------------------------+
    | Copyright (c) 2010-present Facebook, Inc. (http://www.facebook.com)  |
    | Copyright (c) 1997-2010 The PHP Group                                |
@@ -14,7 +14,7 @@
    | license@php.net so we can mail you a copy immediately.               |
    +----------------------------------------------------------------------+
    
-   Update by Artūras Kaukėnas
+   Updated by Artūras Kaukėnas
 */
 
 
@@ -67,7 +67,6 @@ namespace HPHP {
 
 	static bool ini_set_save_handler();
 
-	static bool ini_on_update_save_dir(const std::string& value);
 	static bool mod_is_open();
 
 	///////////////////////////////////////////////////////////////////////////////
@@ -82,7 +81,6 @@ namespace HPHP {
 		};
 
 		std::string 		save_path;
-		bool				reset_save_path{false};
 		std::string 		save_handler_str;
 		
 		std::string 		crypto_cookie_time_user_key;
@@ -139,8 +137,6 @@ namespace HPHP {
 			id.detach();
 			session_status = Session::None;
 			ps_session_handler.reset();
-			save_path.clear();
-			if (reset_save_path) IniSetting::ResetSystemDefault("session.save_path");
 		}
 
 		void destroy() {
@@ -370,14 +366,13 @@ namespace HPHP {
 		return obj;
 	}
 
-	bool SystemlibSessionModule::open(const char *save_path, const char *session_name) {
+	bool SystemlibSessionModule::open(const char *session_name) {
 		const auto& obj = getObject();
 
-		Variant savePath = String(save_path, CopyString);
 		Variant sessionName = String(session_name, CopyString);
 	
-		TypedValue args[2] = { *savePath.toCell(), *sessionName.toCell() };
-		auto ret = Variant::attach(g_context->invokeFuncFew(m_open, obj.get(), nullptr, 2, args));
+		TypedValue args[1] = { *sessionName.toCell() };
+		auto ret = Variant::attach(g_context->invokeFuncFew(m_open, obj.get(), nullptr, 1, args));
 
 		if (ret.isBoolean() && ret.toBoolean()) {
 			s_session->mod_data = true;
@@ -472,355 +467,15 @@ namespace HPHP {
 	}
 	
 	//////////////////////////////////////////////////////////////////////////////
-	// FileSessionModule
-
-	struct FileSessionData {
-	  FileSessionData() : m_fd(-1), m_dirdepth(0), m_st_size(0), m_filemode(0600) {
-	  }
-
-	  bool open(const char* save_path, const char* session_name) {
-		String tmpdir;
-		if (*save_path == '\0') {
-		  tmpdir = HHVM_FN(sys_get_temp_dir)();
-		  save_path = tmpdir.data();
-		}
-
-		/* split up input parameter */
-		const char *argv[3];
-		int argc = 0;
-		const char *last = save_path;
-		const char *p = strchr(save_path, ';');
-		while (p) {
-		  argv[argc++] = last; last = ++p; p = strchr(p, ';');
-		  if (argc > 1) break;
-		}
-		argv[argc++] = last;
-
-		if (argc > 1) {
-		  errno = 0;
-		  m_dirdepth = (size_t) strtol(argv[0], nullptr, 10);
-		  if (errno == ERANGE) {
-			raise_warning("The first parameter in session.save_path is invalid");
-			return false;
-		  }
-		}
-
-		if (argc > 2) {
-		  errno = 0;
-		  m_filemode = strtol(argv[1], nullptr, 8);
-		  if (errno == ERANGE || m_filemode < 0 || m_filemode > 07777) {
-			raise_warning("The second parameter in session.save_path is invalid");
-			return false;
-		  }
-		}
-
-		save_path = argv[argc - 1];
-		if (File::TranslatePath(save_path).empty()) {
-		  raise_warning("Unable to open save_path %s", save_path);
-		  return false;
-		}
-
-		m_fd = -1;
-		m_basedir = save_path;
-		s_session->mod_data = true;
-		return true;
-	  }
-
-	  bool close() {
-		closeImpl();
-		m_lastkey.clear();
-		m_basedir.clear();
-		s_session->mod_data = false;
-		return true;
-	  }
-
-	  bool read(const char *key, String &value) {
-		openImpl(key);
-		if (m_fd < 0) {
-		  return false;
-		}
-
-		struct stat sbuf;
-		if (fstat(m_fd, &sbuf)) {
-		  return false;
-		}
-		m_st_size = sbuf.st_size;
-		if (m_st_size == 0) {
-		  value = "";
-		  return true;
-		}
-
-		String s = String(m_st_size, ReserveString);
-		char *val = s.mutableData();
-
-		lseek(m_fd, 0, SEEK_SET);
-		long n = ::read(m_fd, val, m_st_size);
-
-		if (n != (int)m_st_size) {
-		  if (n == -1) {
-			raise_warning("read failed: %s (%d)", folly::errnoStr(errno).c_str(),
-						  errno);
-		  } else {
-				raise_warning("read returned less bytes than requested");
-		  }
-		  return false;
-		}
-
-		value = s.setSize(m_st_size);
-		return true;
-	  }
-
-	  bool write(const char *key, const String& value) {
-		openImpl(key);
-		if (m_fd < 0) {
-		  return false;
-		}
-
-		struct stat sbuf;
-		if (fstat(m_fd, &sbuf)) {
-		  return false;
-		}
-		m_st_size = sbuf.st_size;
-
-		/*
-		 * truncate file, if the amount of new data is smaller than
-		 * the existing data set.
-		 */
-		if (value.size() < (int)m_st_size) {
-		  if (ftruncate(m_fd, 0) < 0) {
-			raise_warning("truncate failed: %s (%d)",
-						  folly::errnoStr(errno).c_str(), errno);
-			return false;
-		  }
-		}
-
-		lseek(m_fd, 0, SEEK_SET);
-		long n = ::write(m_fd, value.data(), value.size());
-
-		if (n != value.size()) {
-		  if (n == -1) {
-			raise_warning("write failed: %s (%d)",
-						  folly::errnoStr(errno).c_str(), errno);
-		  } else {
-			raise_warning("write wrote less bytes than requested");
-		  }
-		  return false;
-		}
-
-		return true;
-	  }
-
-	  bool destroy(const char *key) {
-		char buf[PATH_MAX];
-		if (!createPath(buf, sizeof(buf), key)) {
-		  return false;
-		}
-
-		if (m_fd != -1) {
-		  closeImpl();
-		  if (unlink(buf) == -1) {
-			/* This is a little safety check for instances when we are dealing
-			   with a regenerated session that was not yet written to disk */
-			if (!access(buf, F_OK)) {
-			  return false;
-			}
-		  }
-		}
-
-		return true;
-	  }
-
-	  bool gc(int maxlifetime, int *nrdels) {
-		/* we don't perform any cleanup, if dirdepth is larger than 0.
-		   we return true, since all cleanup should be handled by
-		   an external entity (i.e. find -ctime x | xargs rm) */
-		if (m_dirdepth == 0) {
-		  *nrdels = CleanupDir(m_basedir.c_str(), maxlifetime);
-		}
-		return true;
-	  }
-
-	private:
-	  int m_fd;
-	  std::string m_lastkey;
-	  std::string m_basedir;
-	  size_t m_dirdepth;
-	  size_t m_st_size;
-	  int m_filemode;
-
-	  /* If you change the logic here, please also update the error message in
-	   * ps_files_open() appropriately */
-	  static bool IsValid(const char *key) {
-		const char *p; char c;
-		bool ret = true;
-		for (p = key; (c = *p); p++) {
-		  /* valid characters are a..z,A..Z,0..9 */
-		  if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-				|| (c >= '0' && c <= '9') || c == ',' || c == '-')) {
-			ret = false;
-			break;
-		  }
-		}
-		size_t len = p - key;
-		if (len == 0) {
-		  ret = false;
-		}
-		return ret;
-	  }
-
-	#define FILE_PREFIX "sess_"
-
-	  bool createPath(char *buf, size_t buflen, const char *key) {
-		size_t key_len = strlen(key);
-		if (key_len <= m_dirdepth ||
-			buflen < (m_basedir.size() + 2 * m_dirdepth + key_len +
-					  5 + sizeof(FILE_PREFIX))) {
-		  return false;
-		}
-
-		const char *p = key;
-		int n = m_basedir.size();
-		memcpy(buf, m_basedir.c_str(), n);
-		buf[n++] = PHP_DIR_SEPARATOR;
-		for (int i = 0; i < (int)m_dirdepth; i++) {
-		  buf[n++] = *p++;
-		  buf[n++] = PHP_DIR_SEPARATOR;
-		}
-		memcpy(buf + n, FILE_PREFIX, sizeof(FILE_PREFIX) - 1);
-		n += sizeof(FILE_PREFIX) - 1;
-		memcpy(buf + n, key, key_len);
-		n += key_len;
-		buf[n] = '\0';
-
-		return true;
-	  }
-
-	  void closeImpl() {
-		if (m_fd != -1) {
-		  ::close(m_fd);
-		  m_fd = -1;
-		}
-	  }
-
-	  void openImpl(const char *key) {
-		if (m_fd < 0 || !m_lastkey.empty() || m_lastkey != key) {
-		  m_lastkey.clear();
-		  closeImpl();
-
-		  if (!IsValid(key)) {
-			raise_warning("The session id contains illegal characters, "
-						  "valid characters are a-z, A-Z, 0-9 and '-,'");
-			s_session->invalid_session_id = true;
-			return;
-		  }
-
-		  char buf[PATH_MAX];
-		  if (!createPath(buf, sizeof(buf), key)) {
-			return;
-		  }
-
-		  m_lastkey = key;
-		  m_fd = ::open(buf, O_CREAT | O_RDWR | 0, m_filemode);
-
-		  if (m_fd != -1) {
-			flock(m_fd, LOCK_EX);
-
-	#ifdef F_SETFD
-	# ifndef FD_CLOEXEC
-	#  define FD_CLOEXEC 1
-	# endif
-			if (fcntl(m_fd, F_SETFD, FD_CLOEXEC)) {
-			  raise_warning("fcntl(%d, F_SETFD, FD_CLOEXEC) failed: %s (%d)",
-							m_fd, folly::errnoStr(errno).c_str(), errno);
-			}
-	#endif
-		  } else {
-			raise_warning("open(%s, O_RDWR) failed: %s (%d)", buf,
-						  folly::errnoStr(errno).c_str(), errno);
-		  }
-		}
-	  }
-
-	  static int CleanupDir(const char *dirname, int maxlifetime) {
-		DIR *dir = opendir(dirname);
-		if (!dir) {
-		  raise_notice("ps_files_cleanup_dir: opendir(%s) failed: %s (%d)",
-					   dirname, folly::errnoStr(errno).c_str(), errno);
-		  return 0;
-		}
-
-		time_t now;
-		time(&now);
-
-		size_t dirname_len = strlen(dirname);
-		char dentry[sizeof(struct dirent) + PATH_MAX];
-		struct dirent *entry = (struct dirent *) &dentry;
-		struct stat sbuf;
-		int nrdels = 0;
-
-		/* Prepare buffer (dirname never changes) */
-		char buf[PATH_MAX];
-		memcpy(buf, dirname, dirname_len);
-		buf[dirname_len] = PHP_DIR_SEPARATOR;
-
-		while (readdir_r(dir, (struct dirent *)dentry, &entry) == 0 && entry) {
-		  /* does the file start with our prefix? */
-		  if (!strncmp(entry->d_name, FILE_PREFIX, sizeof(FILE_PREFIX) - 1)) {
-			size_t entry_len = strlen(entry->d_name);
-
-			/* does it fit into our buffer? */
-			if (entry_len + dirname_len + 2 < PATH_MAX) {
-			  /* create the full path.. */
-			  memcpy(buf + dirname_len + 1, entry->d_name, entry_len);
-
-			  /* NUL terminate it and */
-			  buf[dirname_len + entry_len + 1] = '\0';
-
-			  /* check whether its last access was more than maxlifet ago */
-			  if (stat(buf, &sbuf) == 0 && (now - sbuf.st_mtime) > maxlifetime) {
-				unlink(buf);
-				nrdels++;
-			  }
-			}
-		  }
-		}
-
-		closedir(dir);
-		return nrdels;
-	  }
-	};
-	RDS_LOCAL(FileSessionData, s_file_session_data);
-
-	struct FileSessionModule : SessionModule {
-	  FileSessionModule() : SessionModule("files") {
-	  }
-	  bool open(const char *save_path, const char *session_name) override {
-		return s_file_session_data->open(save_path, session_name);
-	  }
-	  bool close() override {
-		return s_file_session_data->close();
-	  }
-	  bool read(const char *key, String &value) override {
-		return s_file_session_data->read(key, value);
-	  }
-	  bool write(const char *key, const String& value) override {
-		return s_file_session_data->write(key, value);
-	  }
-	  bool destroy(const char *key) override {
-		return s_file_session_data->destroy(key);
-	  }
-	  bool gc(int maxlifetime, int *nrdels) override {
-		return s_file_session_data->gc(maxlifetime, nrdels);
-	  }
-	};
-	static FileSessionModule s_file_session_module;
-
-	//////////////////////////////////////////////////////////////////////////////
 	// SystemlibSessionModule implementations
 
 	static struct MemcacheSessionModule : SystemlibSessionModule {
 		MemcacheSessionModule() : SystemlibSessionModule("memcache", "MemcacheSessionModule") { }
 	} s_memcache_session_module;
+	
+	static struct FileSessionModule : SystemlibSessionModule {
+		FileSessionModule() : SystemlibSessionModule("file", "FileSessionModule") { }
+	} s_file_session_module;
 
 
 	///////////////////////////////////////////////////////////////////////////////
@@ -919,19 +574,6 @@ namespace HPHP {
 		return session_check_active_state();
 	}
 
-	static bool ini_on_update_save_dir(const std::string& value) {
-		if (value.find('\0') != std::string::npos) {
-			return false;
-		}
-		if (g_context.isNull()) return false;
-		const char *path = value.data() + (value.rfind(';') + 1);
-		if (File::TranslatePath(path).empty()) {
-			return false;
-		}
-		s_session->save_path = path;
-		return true;
-	}
-
 	///////////////////////////////////////////////////////////////////////////////
 
 	static bool php_session_destroy() {
@@ -979,11 +621,7 @@ namespace HPHP {
 		}
 
 		/* Open session handler first */
-		if (!s_session->mod->open(
-				s_session->save_path.c_str(), 
-				s_session->session_name.c_str()
-			)
-		) {
+		if (!s_session->mod->open(s_session->session_name.c_str())) {
 			raise_error("Failed to initialize storage module: %s (path: %s)", s_session->mod->getName(), s_session->save_path.c_str());
 			return;
 		}
@@ -1235,12 +873,6 @@ namespace HPHP {
 
 	String HHVM_FUNCTION(session_id, const Variant& newid /* = null_string */) {
 		String ret = s_session->id;
-		/*if (ret.isNull()) {
-			ret = empty_string();
-		}
-		if (!newid.isNull()) {
-			s_session->id = newid.toString();
-		}*/
 		return ret;
 	}
 
@@ -1426,17 +1058,8 @@ namespace HPHP {
 			s_session.getCheck();
 			Extension* ext = ExtensionRegistry::get(s_session_ext_name);
 			assertx(ext);
-			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL,
-				"session.save_path",               "",
-				IniSetting::SetAndGet<std::string>(
-					ini_on_update_save_dir, nullptr
-				),
-				&s_session->save_path);
-			Variant v;
-			if (IniSetting::GetSystem("session.save_path", v) && !v.toString().empty()) {
-				s_session->reset_save_path = true;
-			}
-
+			
+			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.save_path", "/tmp/hhvm_session/", &s_session->save_path);	
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.crypto_cookie_time_user_key", "2592000", &s_session->crypto_cookie_time_user_key);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.use_crypto_storage_user_key", "0", &s_session->use_crypto_storage_user_key);
 			IniSetting::Bind(ext, IniSetting::PHP_INI_ALL, "session.use_crypto_storage", "0", &s_session->use_crypto_storage);

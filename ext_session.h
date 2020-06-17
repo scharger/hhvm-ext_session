@@ -1,6 +1,6 @@
 /*
    +----------------------------------------------------------------------+
-   | HipHop for PHP                                                       |
+   | ext_session lib                                                      |                                                     |
    +----------------------------------------------------------------------+
    | Copyright (c) 2010-present Facebook, Inc. (http://www.facebook.com)  |
    | Copyright (c) 1997-2010 The PHP Group                                |
@@ -13,6 +13,8 @@
    | obtain it through the world-wide-web, please send a note to          |
    | license@php.net so we can mail you a copy immediately.               |
    +----------------------------------------------------------------------+
+ 
+	Updated by Artūras Kaukėnas
 */
 
 #include "hphp/runtime/ext/extension.h"
@@ -49,7 +51,7 @@ namespace HPHP {
 
 	  const char *getName() const { return m_name; }
 
-	  virtual bool open(const char *save_path, const char *session_name) = 0;
+	  virtual bool open(const char *session_name) = 0;
 	  virtual bool close() = 0;
 	  virtual bool read(const char *key, String &value) = 0;
 	  virtual bool write(const char *key, const String& value) = 0;
@@ -93,7 +95,7 @@ namespace HPHP {
 			   SessionModule(mod_name),
 			   m_classname(phpclass_name) { }
 
-	  virtual bool open(const char *save_path, const char *session_name);
+	  virtual bool open(const char *session_name);
 	  virtual bool close();
 	  virtual bool read(const char *key, String &value);
 	  virtual bool write(const char *key, const String& value);

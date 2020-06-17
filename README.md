@@ -2,6 +2,13 @@
 Ported original HHVM ext_session from HHVM 4.3.
 Only memcache storage method exists.
 
+## License
+
+This software source files are licensed under PHP 3.01 and MIT licenses.
+You can choose between one of them if you use this work.
+
+`SPDX-License-Identifier: PHP-3.01 AND MIT`
+
 ### Tested with HHVM 4.8 and 3.27
 
 ## Description
@@ -111,6 +118,7 @@ SessionHandlerInterface
 
 ### Handler Modules
 MemcacheSessionModule
+FileSessionModule
 
 ### Additional
 class Crypto(string $crypto_secret)

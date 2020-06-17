@@ -1,9 +1,10 @@
 <?hh // partial
 /*
--------------------------Crypto-------------------------
+-------------------------Crypto Lib-------------------------
 MIT License
 
-Copyright (c) 2017 Vladislav Yarmak
+Original work Copyright (c) 2017 Vladislav Yarmak
+Modified work Copyright (c) 2020 Artūras Kaukėnas
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,8 +23,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-Update by Artūras Kaukėnas
 */
 
 final class Crypto {
@@ -194,19 +193,19 @@ final class Crypto {
 	}
 	
 	private function hash_equals(string $a, string $b) : bool {
-		$ret = strlen($a) ^ strlen($b);
-		$ret |= array_sum(unpack("C*", $a^$b));
+		$ret = \strlen($a) ^ \strlen($b);
+		$ret |= \array_sum(\unpack("C*", $a^$b));
 		return !$ret;
 	}
 	
 	private function base64_urlsafe_encode(string $input) : string {
-        return strtr(base64_encode($input), array("+" => "-", "/" => "_", "=" => ""));
+        return \strtr(\base64_encode($input), array("+" => "-", "/" => "_", "=" => ""));
     }
 
     private function base64_urlsafe_decode(string $input) : string {
-        $translated = strtr($input, array("-" => "+", "_" => "/"));
-        $padded = str_pad($translated, ( (int)((strlen($input) + 3) / 4) ) * 4, "=", STR_PAD_RIGHT);
-        return base64_decode($padded);
+        $translated = \strtr($input, array("-" => "+", "_" => "/"));
+        $padded = \str_pad($translated, ( (int)((\strlen($input) + 3) / 4) ) * 4, "=", \STR_PAD_RIGHT);
+        return \base64_decode($padded);
     }
 
     /*
@@ -265,9 +264,9 @@ final class Crypto {
 }
 
 /*
--------------------------ext_session-------------------------
+	-------------------------ext_session functions-------------------------
    +----------------------------------------------------------------------+
-   | HipHop for PHP                                                       |
+   | ext_session functions                                                |
    +----------------------------------------------------------------------+
    | Copyright (c) 2010-present Facebook, Inc. (http://www.facebook.com)  |
    | Copyright (c) 1997-2010 The PHP Group                                |
@@ -281,7 +280,7 @@ final class Crypto {
    | license@php.net so we can mail you a copy immediately.               |
    +----------------------------------------------------------------------+
    
-   Update by Artūras Kaukėnas
+   Updated by Artūras Kaukėnas
 */
 
 
@@ -297,10 +296,10 @@ final class Crypto {
    *   value returned should be read in minutes, defaults to 180.
    */
   function session_cache_expire(mixed $new_cache_expire = null): int {
-    $ret = (int)ini_get('session.cache_expire');
+    $ret = (int) \ini_get('session.cache_expire');
     if ($new_cache_expire !== null) {
       $val = (string)$new_cache_expire;
-      ini_set('session.cache_expire', (int)$val);
+      \ini_set('session.cache_expire', (int)$val);
     }
     return $ret;
   }
@@ -316,9 +315,9 @@ final class Crypto {
    * @return string - Returns the name of the current cache limiter.
    */
   function session_cache_limiter(mixed $cache_limiter = null): string {
-    $ret = (string)ini_get('session.cache_limiter');
+    $ret = (string) \ini_get('session.cache_limiter');
     if ($cache_limiter !== null) {
-      ini_set('session.cache_limiter', (string)$cache_limiter);
+      \ini_set('session.cache_limiter', (string) $cache_limiter);
     }
     return $ret;
   }
@@ -369,11 +368,11 @@ final class Crypto {
    */
   function session_get_cookie_params(): array<string, mixed> {
     return array(
-      'lifetime' => (int)ini_get('session.cookie_lifetime'),
-      'path'     => (string)ini_get('session.cookie_path'),
-      'domain'   => (string)ini_get('session.cookie_domain'),
-      'secure'   => (bool)ini_get('session.cookie_secure'),
-      'httponly' => (bool)ini_get('session.cookie_httponly')
+      'lifetime' => (int) \ini_get('session.cookie_lifetime'),
+      'path'     => (string) \ini_get('session.cookie_path'),
+      'domain'   => (string) \ini_get('session.cookie_domain'),
+      'secure'   => (bool) \ini_get('session.cookie_secure'),
+      'httponly' => (bool) \ini_get('session.cookie_httponly')
     );
   }
 
@@ -391,7 +390,7 @@ final class Crypto {
    * @return string - Returns the name of the current session.
    */
 	function session_name(mixed $name = null): string {
-		return (string)ini_get('session.name');
+		return (string) \ini_get('session.name');
 	}
 
   /**
@@ -426,25 +425,25 @@ final class Crypto {
                                      mixed $secure = null,
                                      mixed $httponly = null): void {
     if (is_object($lifetime)) {
-      trigger_error(sprintf(
+      \trigger_error(\sprintf(
         'Notice: Object of class %s could not be converted to int',
-        get_class($lifetime)),
-      E_NOTICE);
+        \get_class($lifetime)),
+      \E_NOTICE);
       return;
     }
-    if (ini_get('session.use_cookies')) {
-      ini_set('session.cookie_lifetime', (int)$lifetime);
+    if (\ini_get('session.use_cookies')) {
+      \ini_set('session.cookie_lifetime', (int)$lifetime);
       if ($path !== null) {
-        ini_set('session.cookie_path', (string)$path);
+        \ini_set('session.cookie_path', (string)$path);
       }
       if ($domain !== null) {
-        ini_set('session.cookie_domain', (string)$domain);
+        \ini_set('session.cookie_domain', (string)$domain);
       }
       if ($secure !== null) {
-        ini_set('session.cookie_secure', (bool)$secure);
+        \ini_set('session.cookie_secure', (bool)$secure);
       }
       if ($httponly !== null) {
-        ini_set('session.cookie_httponly', (bool)$httponly);
+        \ini_set('session.cookie_httponly', (bool)$httponly);
       }
     }
   }
@@ -504,15 +503,52 @@ final class Crypto {
 		unset($session_var[$key]);
 		\HH\global_set("_SESSION", $session_var);
 	}
-  
+
+/*
+	-----------------------SessionHandlerInterface-------------------------
+   +----------------------------------------------------------------------+
+   | SessionHandlerInterface                                              |
+   +----------------------------------------------------------------------+
+   | Copyright (c) 2010-present Facebook, Inc. (http://www.facebook.com)  |
+   | Copyright (c) 1997-2010 The PHP Group                                |
+   +----------------------------------------------------------------------+
+   | This source file is subject to version 3.01 of the PHP license,      |
+   | that is bundled with this package in the file LICENSE, and is        |
+   | available through the world-wide-web at the following url:           |
+   | http://www.php.net/license/3_01.txt                                  |
+   | If you did not receive a copy of the PHP license and are unable to   |
+   | obtain it through the world-wide-web, please send a note to          |
+   | license@php.net so we can mail you a copy immediately.               |
+   +----------------------------------------------------------------------+
+   
+   Updated by Artūras Kaukėnas
+*/
+
 interface SessionHandlerInterface {
 	public function close() : bool;
 	public function destroy(string $sessionId) : bool;
-	public function gc(mixed $maxLifetime) : bool;
-	public function open(string $savePath, mixed $name) : bool;
+	public function gc(mixed $maxLifetime) : mixed;
+	public function open(mixed $name) : bool;
 	public function read(mixed $sessionId) : mixed;
 	public function write(mixed $sessionId, mixed $data) : bool;
 }
+
+/*
+	-------------------------MemcacheSessionModule-------------------------
+   +----------------------------------------------------------------------+
+   |  MemcacheSessionModule for HHVM                                      |
+   +----------------------------------------------------------------------+
+   | Copyright (c) 2020-present Artūras Kaukėnas						  |
+   +----------------------------------------------------------------------+
+   | This source file is subject to version 3.01 of the PHP license,      |
+   | that is bundled with this package in the file LICENSE, and is        |
+   | available through the world-wide-web at the following url:           |
+   | http://www.php.net/license/3_01.txt                                  |
+   | If you did not receive a copy of the PHP license and are unable to   |
+   | obtain it through the world-wide-web, please send a note to          |
+   | license@php.net so we can mail you a copy immediately.               |
+   +----------------------------------------------------------------------+
+*/
   
 final class MemcacheSessionModule implements SessionHandlerInterface {
 	private \Memcache $mc;
@@ -547,11 +583,11 @@ final class MemcacheSessionModule implements SessionHandlerInterface {
 		return true;
 	}
 
-	public function gc(mixed $maxLifetime) : bool {
-		return true;
+	public function gc(mixed $maxLifetime) : mixed {
+		return 0;
 	}
   
-	public function open(string $savePath, mixed $name) : bool {
+	public function open(mixed $name) : bool {
 		$this->openCalled = true;
 		
 		if ($this->connected) {
@@ -607,16 +643,16 @@ final class MemcacheSessionModule implements SessionHandlerInterface {
 			$this->cryptoStorage_user_key = new Crypto($this->crypto_secret_user_key);
 		}
 		
-		$host = ini_get("session.memcache_host");
-		if (is_bool($host)) {
+		$host = \ini_get("session.memcache_host");
+		if ($host is bool) {
 			throw new \Exception("Session open failed. session.memcache_host wrong or not specified");
 			return $this->connected;
 		}
 		
 		$host = (string) $host;
 		
-		$port = ini_get("session.memcache_port");
-		if (is_bool($port)) {
+		$port = \ini_get("session.memcache_port");
+		if ($port is bool) {
 			$port = null;
 		} else {
 				$port = (int) $port;
@@ -626,8 +662,8 @@ final class MemcacheSessionModule implements SessionHandlerInterface {
 		$this->mc = new \Memcache;
 		
 		$pconnectR = false;
-		$pconnect = ini_get("session.memcache_persistent");
-		if (!is_bool($pconnect)) {
+		$pconnect = \ini_get("session.memcache_persistent");
+		if (!$pconnect is bool) {
 			if ((int) $pconnect == 1) {
 				$pconnectR = true;
 			}
@@ -645,7 +681,7 @@ final class MemcacheSessionModule implements SessionHandlerInterface {
 				throw new \Exception("Session open error. Memcache connection failed");
 		}
 		
-		$this->gc_maxlifetime = (int) ini_get('session.gc_maxlifetime');
+		$this->gc_maxlifetime = (int) \ini_get('session.gc_maxlifetime');
 		
 		return $this->connected;
 	}
@@ -668,6 +704,7 @@ final class MemcacheSessionModule implements SessionHandlerInterface {
 		if ($this->use_crypto_storage) {
 			$data = $this->cryptoStorage->decrypt($sessionId, $data);
 			if ($data == "") {
+				$this->mc->delete($sessionId);
 				return "";
 			}
 			
@@ -675,6 +712,7 @@ final class MemcacheSessionModule implements SessionHandlerInterface {
 		if ($this->use_crypto_storage_user_key) {
 			$data = $this->cryptoStorage_user_key->decrypt($sessionId, $data);
 			if ($data == "") {
+				$this->mc->delete($sessionId);
 				return "";
 			}
 		}
@@ -714,6 +752,313 @@ final class MemcacheSessionModule implements SessionHandlerInterface {
 		if ($ret == false) {
 			throw new \Exception("Session write error: (sessionId:".$sessionId);
 		}
+		
+		return $ret;
+	}
+}
+
+/*
+	-------------------------FileSessionModule----------------------------
+   +----------------------------------------------------------------------+
+   | FileSessionModule for HHVM                                           |
+   +----------------------------------------------------------------------+
+   | Copyright (c) 2020-present Artūras Kaukėnas						  |
+   +----------------------------------------------------------------------+
+   | This source file is subject to version 3.01 of the PHP license,      |
+   | that is bundled with this package in the file LICENSE, and is        |
+   | available through the world-wide-web at the following url:           |
+   | http://www.php.net/license/3_01.txt                                  |
+   | If you did not receive a copy of the PHP license and are unable to   |
+   | obtain it through the world-wide-web, please send a note to          |
+   | license@php.net so we can mail you a copy immediately.               |
+   +----------------------------------------------------------------------+
+*/
+
+final class FileSessionModule implements SessionHandlerInterface {
+	private bool $prepared = false;
+	
+	private string $file_name = "";
+	private string $_FILE_PATCH = "";
+	
+	private $cryptoStorage;
+	private $cryptoStorage_user_key;
+	private bool $use_crypto_storage = false;
+	private string $crypto_secret = "X";
+	
+	private bool $use_crypto_storage_user_key = false;
+	private string $crypto_secret_user_key = "X";
+	
+	private bool $openCalled = false;
+	
+	private int $gc_maxlifetime = 10;
+
+	public function close() : bool {
+		$this->prepared = false;
+		return true;
+	}
+
+	public function destroy(string $file_name) : bool {
+		if (!\file_exists($this->_FILE_PATCH.$file_name)) {
+			return true;
+		}
+		
+		try {
+			\unlink($this->_FILE_PATCH.$file_name);
+		} catch (\Exception $e) {
+		}
+		return true;
+	}
+
+	public function gc(mixed $maxLifetime) : mixed {
+		if (!$this->prepared) {
+			return false;
+		}
+		
+		if (!$maxLifetime is int) {
+			$maxLifetime = (int) $maxLifetime;
+		}
+		
+		if ($maxLifetime < 1) {
+			return 0;
+		}		
+		
+		$nrdels = 0;
+		
+		$allFiles = \scandir($this->_FILE_PATCH);
+		
+		foreach ($allFiles as $file) {
+			if (($file == ".") || ($file == "..")) {
+				continue;
+			}
+			
+			if (\is_dir($this->_FILE_PATCH.$file)) {
+				continue;
+			}
+			
+			if (\time() - \filemtime($this->_FILE_PATCH.$file) > $maxLifetime) {
+				$this->destroy($file);
+				$nrdels++;
+			}
+		}
+		return $nrdels;
+	}
+  
+	public function open(mixed $name) : bool {
+		$this->prepared = false;
+		
+		$savePath = \ini_get("session.save_path");
+		
+		if ($savePath is bool) {
+			throw new \Exception("Session open failed. ini session.save_path not specified");
+			return $this->prepared;
+		}
+		
+		$savePath = (string) $savePath;
+		
+		$this->openCalled = true;
+		
+		if ($this->prepared) {
+			return true;
+		}
+		
+		if (!$name is string) {
+			$this->name = "";
+			throw new \Exception("Session open failed. Session name incorrect");
+			return $this->prepared;
+		}
+		
+		$this->name = $name;
+		$this->_FILE_PATCH = $savePath;
+		
+		if (\file_exists($savePath)) {
+			if (!\is_dir($savePath)) {
+				throw new \Exception("Session open failed. session.save_path (".$savePath.") is not a directory");
+				return $this->prepared;
+			}
+		} else {
+				@\mkdir($savePath, 0600, true);
+		}
+		
+		if (!\is_dir($savePath)) {
+			throw new \Exception("Session open failed. session.save_path (".$savePath.") is not a directory");
+			return $this->prepared;
+		}
+		
+		if (!\is_writable($savePath)) {
+			throw new \Exception("Session open failed. session.save_path is not writable");
+			return $this->prepared;
+		}
+		
+		$use_crypto_storage = \ini_get("session.use_crypto_storage");
+		if (!$use_crypto_storage is bool) {
+			$use_crypto_storage = (int) $use_crypto_storage;			
+			if ($use_crypto_storage == 1) {
+				$crypto_secret = \ini_get("session.crypto_secret");
+				if ($crypto_secret is bool) {
+					throw new \Exception("Session open failed. session.crypto_secret wrong or not specified");
+					return $this->prepared;
+				}
+				$crypto_secret = (string) $crypto_secret;
+				
+				if ($crypto_secret == "X") {
+					throw new \Exception("Session open failed. session.crypto_secret should be changed");
+					return $this->prepared;
+				}
+				
+				$this->crypto_secret = $crypto_secret;
+				$this->use_crypto_storage = true;
+			}
+		}
+		
+		$use_crypto_storage_user_key = \ini_get("session.use_crypto_storage_user_key");
+		if (!$use_crypto_storage_user_key is bool) {
+			$use_crypto_storage_user_key = (int) $use_crypto_storage_user_key;			
+			if ($use_crypto_storage_user_key == 1) {
+				$coockieKey = \md5("coockieKey");
+				if (!isset($_COOKIE[$coockieKey])) {
+					$crypto_secret_user_key = \bin2hex(\random_bytes(5));
+					$coockieTime = (int) \ini_get("session.crypto_cookie_time_user_key");
+					if ($coockieTime > 0) {
+						$coockieTime = (time()+$coockieTime);
+					}
+					\setcookie($coockieKey, $crypto_secret_user_key, $coockieTime);
+				} else {
+						$crypto_secret_user_key = $_COOKIE[$coockieKey];
+				}
+
+				$this->crypto_secret_user_key = \md5($crypto_secret_user_key);
+				$this->use_crypto_storage_user_key = true;
+			}
+		}
+		if ($this->use_crypto_storage) {
+			$this->cryptoStorage = new Crypto($this->crypto_secret);
+		}
+		
+		if ($this->use_crypto_storage_user_key) {
+			$this->cryptoStorage_user_key = new Crypto($this->crypto_secret_user_key);
+		}
+	
+		$this->prepared = true;
+		
+		$this->gc_maxlifetime = (int) \ini_get('session.gc_maxlifetime');
+		
+		return $this->prepared;
+	}
+
+	public function read(mixed $sessionId) : mixed {
+		if (!$this->openCalled) {
+			$this->open($this->_FILE_PATCH, $sessionId);
+		}
+		
+		if (!$this->prepared) {
+			throw new \Exception("Session read error: (Session not prepared. SessionID:".$sessionId.")");
+			return false;
+		}
+		
+		if ($sessionId == "") {
+			throw new \Exception("Session read error: (Session not prepared. SessionID:".$sessionId.")");
+			return false;
+		}
+		
+		if (!\file_exists($this->_FILE_PATCH.$sessionId)) {
+			return "";
+		}
+		
+		try {
+			$data = \file_get_contents($this->_FILE_PATCH.$sessionId);
+		} catch (\Exception $e) {
+				throw new \Exception("Session read error: (File read error. SessionID:".$sessionId.")");
+				return false;
+		}
+		
+		if ($data is bool) {
+			return "";
+		}
+		
+		if ($this->use_crypto_storage) {
+			$data = $this->cryptoStorage->decrypt($sessionId, $data);
+			if ($data == "") {
+				$this->destroy($sessionId);
+				return "";
+			}
+			
+		}
+		if ($this->use_crypto_storage_user_key) {
+			$data = $this->cryptoStorage_user_key->decrypt($sessionId, $data);
+			if ($data == "") {
+				$this->destroy($sessionId);
+				return "";
+			}
+		}
+		return $data;
+	}
+
+	public function write(mixed $sessionId, mixed $data) : bool {
+		if (!$this->openCalled) {
+			$this->open($this->_FILE_PATCH, $sessionId);
+		}
+		
+		if (!$this->prepared) {
+			throw new \Exception("Session write error: (Session not prepared. SessionID:".$sessionId.")");
+			return false;
+		}
+		
+		if ($sessionId == "") {
+			throw new \Exception("Session write error: (Session not prepared. SessionID:".$sessionId.")");
+			return false;
+		}
+		
+		try {
+			$fp = \fopen($this->_FILE_PATCH.$sessionId, "w+");
+		} catch (\Exception $e) {
+				throw new \Exception("Session write error: (File open error. SessionID:".$sessionId.")");
+				return false;
+		}
+		
+		if ($fp is bool) {
+			throw new \Exception("Session write error: (File open error. SessionID:".$sessionId.")");
+			return false;
+		}
+		
+		@\flock($fp, \LOCK_EX);
+		
+		$data = (string) $data;
+		
+		if ($this->use_crypto_storage) {
+			$data = $this->cryptoStorage->encrypt($sessionId, $data);
+			if ($data == "") {
+				throw new \Exception("Session write error: (encrypt error)");
+				@\flock($fp, \LOCK_UN);
+				@\fclose($fp);
+				return false;
+			}
+			
+		}
+
+		if ($this->use_crypto_storage_user_key) {
+			$data = $this->cryptoStorage_user_key->encrypt($sessionId, $data);
+			if ($data == "") {
+				throw new \Exception("Session write error: (encrypt error)");
+				@\flock($fp, \LOCK_UN);
+				@\fclose($fp);
+				return false;
+			}
+		}
+		
+		$ret = @\fwrite($fp, $data);
+		
+		@\flock($fp, \LOCK_UN);
+		
+		if ($ret is bool) {
+			@\fclose($fp);
+			\unlink($this->_FILE_PATCH.$sessionId);
+			throw new \Exception("Session write error: (File writing error. SessionID:".$sessionId.")");
+			return false;
+		} else {
+				$ret = true;
+		}
+		
+		@\fclose($fp);
 		
 		return $ret;
 	}
