@@ -1,5 +1,5 @@
 # HHVM ext_session (Beta)
-Ported original HHVM ext_session from HHVM 4.3.
+HHVM 4.3 modified ext_session for HHVM without ext_session.
 
 ### Tested with HHVM 4.8
 
