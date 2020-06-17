@@ -119,11 +119,14 @@ SessionHandlerInterface
 
 ### Handler Modules
 MemcacheSessionModule
+
 FileSessionModule
 
 ### Additional
 class Crypto(string $crypto_secret)
+
 public function decrypt(string $id, string $data) : string
+
 public function encrypt(string $id, string $data) : string
 
 https://www.php.net/manual/en/book.session.php
