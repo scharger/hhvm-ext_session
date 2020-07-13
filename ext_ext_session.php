@@ -835,6 +835,11 @@ final class FileSessionModule implements SessionHandlerInterface {
 				continue;
 			}
 			
+			$mtime = @\filemtime($this->_FILE_PATCH.$file);
+			if ($mtime is bool) {
+				continue;
+			}
+			
 			if (\time() - \filemtime($this->_FILE_PATCH.$file) > $maxLifetime) {
 				$this->destroy($file);
 				$nrdels++;
