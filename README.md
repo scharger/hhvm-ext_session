@@ -1,7 +1,7 @@
 # HHVM ext_session (Beta)
 HHVM 4.3 modified ext_session for HHVM without ext_session.
 
-### Tested with HHVM 4.8
+### Tested with HHVM 4.32
 
 ## License
 
