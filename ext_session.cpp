@@ -44,12 +44,13 @@
 #include "hphp/runtime/base/ini-setting.h"
 #include "hphp/runtime/base/object-data.h"
 #include "hphp/runtime/base/php-globals.h"
-#include "hphp/runtime/base/rds-local.h"
+//#include "hphp/runtime/base/rds-local.h"
 #include "hphp/runtime/base/string-buffer.h"
 #include "hphp/runtime/base/tv-refcount.h"
 #include "hphp/runtime/base/variable-serializer.h"
 #include "hphp/runtime/base/variable-unserializer.h"
-#include "hphp/runtime/base/zend-math.h"
+//#include "hphp/runtime/base/zend-math.h" //HHVM 4.8
+#include "hphp/zend/zend-math.h" //HHVM 4.32
 
 #include "hphp/runtime/ext/extension-registry.h"
 #include "hphp/runtime/ext/hash/ext_hash.h"

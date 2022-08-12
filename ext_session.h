@@ -19,7 +19,8 @@
 
 #include "hphp/runtime/ext/extension.h"
 #include <vector>
-#include "hphp/runtime/base/rds-local.h"
+//#include "hphp/runtime/base/rds-local.h" 	//HHVM 4.8
+#include "hphp/runtime/base/rds-header.h"	//HHVM 4.32
 #include "hphp/runtime/base/request-event-handler.h"
 
 namespace HPHP {

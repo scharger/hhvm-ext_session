@@ -15,6 +15,11 @@ Port ext_session from HHVM 4.3. Only "memcache" and "files" saving handler left.
 ## Installation:
 
 #### 0.
+Install dependences
+```shell
+apt-get install hhvm-dev libjemalloc-dev libgoogle-glog-dev libboost-all-dev libtbb-dev zlib1g-dev
+```
+
 try:
 ```shell
 hphpize
@@ -54,11 +59,7 @@ For example folly for HHVM 4.8:
 https://github.com/facebook/hhvm/
 -> select Branch HHVM-4.8
 
--> go to: "third-party"
-
--> go to: "folly"
-
--> go to: "src"
+-> go to: "third-party/folly/src"
 
 -> clone or download (copy link "Download ZIP")
 
@@ -71,6 +72,29 @@ https://github.com/facebook/hhvm/
 -> Go to folly-8f6d3b107d07324f2876e021948f2c36186ae369
 
 -> extract folly dir to /opt/hhvm/4.8.8/include/
+
+hphp/util/hphp-config.h:
+-> https://github.com/facebook/hhvm/
+-> select Branch HHVM-4.8
+-> go to: "hphp/util/"
+-> open file "hphp-config.h.in" and copy content
+-> cd /opt/hhvm/4.8.8/include/hphp/util/
+-> nano hphp-config.h
+-> right mouse click
+-> Ctrl + O -> Enter -> Ctrl + X
+
+
+#### 0.5.
+Additional dependency problems.
+Try to download hhvm -> hphp folder content into /usr/include/hphp (Use your branch!)
+
+-> cd /usr/include/
+-> apt-get install unzip
+-> wget wget https://github.com/facebook/hhvm/archive/refs/heads/HHVM-4.8.zip
+-> unzip HHVM-4.8.zip
+-> rm HHVM-4.8.zip
+-> move hphp folder form /usr/include/hhvm-HHVM-4-8 to /usr/include/
+-> copy hphp folder form /usr/include/ to /opt/hhvm/4.8.8/include/
 
 #### 1. 
 ```shell

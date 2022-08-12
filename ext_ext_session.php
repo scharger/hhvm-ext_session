@@ -405,8 +405,8 @@ final class Crypto {
   /**
    * Set the session cookie parameters
    *
-   * @param int $lifetime - Lifetime of the session cookie, defined in
-   *   seconds.
+   * @param int|array $lifetime_or_options - Lifetime of the session cookie, defined in
+   *   seconds OR options.
    * @param string $path - Path on the domain where the cookie will work.
    *   Use a single slash ('/') for all paths on the domain.
    * @param string $domain - Cookie domain, for example 'www.php.net'. To
@@ -419,34 +419,97 @@ final class Crypto {
    *
    * @return void -
    */
-  function session_set_cookie_params(mixed $lifetime,
-                                     mixed $path = null,
-                                     mixed $domain = null,
-                                     mixed $secure = null,
-                                     mixed $httponly = null): void {
-    if (is_object($lifetime)) {
-      \trigger_error(\sprintf(
-        'Notice: Object of class %s could not be converted to int',
-        \get_class($lifetime)),
-      \E_NOTICE);
-      return;
+function session_set_cookie_params(
+	mixed $lifetime_or_options,
+	?string $path = null,
+	?string $domain = null,
+	?bool $secure = null,
+	?bool $httponly = null
+): void {
+	$lifetimeF 		= null;
+	$pathF 			= null;
+	$domainF 		= null;
+	$secureF 		= null;
+	$httponlyF 		= null;
+
+	if (\is_object($lifetime_or_options)) {
+		$lifetime_or_options = (array) $lifetime_or_options;
     }
-    if (\ini_get('session.use_cookies')) {
-      \ini_set('session.cookie_lifetime', (int)$lifetime);
-      if ($path !== null) {
-        \ini_set('session.cookie_path', (string)$path);
-      }
-      if ($domain !== null) {
-        \ini_set('session.cookie_domain', (string)$domain);
-      }
-      if ($secure !== null) {
-        \ini_set('session.cookie_secure', (bool)$secure);
-      }
-      if ($httponly !== null) {
-        \ini_set('session.cookie_httponly', (bool)$httponly);
-      }
+
+	if (\is_array($lifetime_or_options)) {
+		if (isset($lifetime_or_options['lifetime'])) {
+			if ($lifetime_or_options['lifetime'] is int) {
+				$lifetimeF = $lifetime_or_options['lifetime'];
+			}
+		}
+
+		if (isset($lifetime_or_options['path'])) {
+			if ($lifetime_or_options['path'] is string) {
+				$pathF = $lifetime_or_options['path'];
+			}
+		}
+
+		if (isset($lifetime_or_options['domain'])) {
+			if ($lifetime_or_options['domain'] is string) {
+				$domainF = $lifetime_or_options['domain'];
+			}
+		}
+
+		if (isset($lifetime_or_options['secure'])) {
+			if ($lifetime_or_options['secure'] is bool) {
+				$secureF = $lifetime_or_options['secure'];
+			}
+		}
+
+		if (isset($lifetime_or_options['httponly'])) {
+			if ($lifetime_or_options['httponly'] is bool) {
+				$httponlyF = $lifetime_or_options['httponly'];
+			}
+		}
+	}
+
+	if ($lifetime_or_options is int) {
+		$lifetimeF = $lifetime_or_options;
+	}
+
+	if ($path is string) {
+		$pathF = $path;
+	}
+
+	if ($domain is string) {
+		$domainF = $domain;
+	}
+
+	if ($secure is bool) {
+		$secureF = $secure;
+	}
+
+	if ($httponly is bool) {
+		$httponlyF = $httponly;
+	}
+
+	if (\ini_get('session.use_cookies')) {
+		if ($lifetimeF !== null) {
+			\ini_set('session.cookie_lifetime', $lifetimeF);
+		}
+
+		if ($pathF !== null) {
+			\ini_set('session.cookie_path', $pathF);
+		}
+
+		if ($domainF !== null) {
+			\ini_set('session.cookie_domain', $domainF);
+		}
+
+		if ($secureF !== null) {
+			\ini_set('session.cookie_secure', $secureF);
+		}
+
+		if ($httponlyF !== null) {
+			\ini_set('session.cookie_httponly', $httponlyF);
+		}
     }
-  }
+}
 
   /**
    * Start new or resume existing session
