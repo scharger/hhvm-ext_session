@@ -178,7 +178,12 @@ final class Crypto {
         $iv = \openssl_random_pseudo_bytes($this->cipher_ivlen);
         $key = $this->pbkdf2($this->digest_algo, $this->secret, $id.$valid_till_bin, 1, $this->cipher_keylen, true);
 
-        $ciphertext = \openssl_encrypt($data, $this->cipher_algo, $key, \OPENSSL_RAW_DATA, $iv);
+		if (\function_exists("\str_replace_with_count")) {
+			$ciphertext = \openssl_encrypt_with_tag($data, $this->cipher_algo, $key, \OPENSSL_RAW_DATA, $iv);
+		} else {
+				$ciphertext = \openssl_encrypt($data, $this->cipher_algo, $key, \OPENSSL_RAW_DATA, $iv);
+		}
+
         if ($ciphertext === false) {
             throw new \Exception("Session data encrypt failed. OpenSSL error.");
         }
@@ -1087,16 +1092,17 @@ final class FileSessionModule implements SessionHandlerInterface {
 			throw new \Exception("Session write error: (File open error. SessionID:".$sessionId.")");
 			return false;
 		}
-		
-		@\flock($fp, \LOCK_EX);
-		
+
+		$null = null;
+		@\flock($fp, \LOCK_EX, inout $null);
+
 		$data = (string) $data;
 		
 		if ($this->use_crypto_storage) {
 			$data = $this->cryptoStorage->encrypt($sessionId, $data);
 			if ($data == "") {
 				throw new \Exception("Session write error: (encrypt error)");
-				@\flock($fp, \LOCK_UN);
+				@\flock($fp, \LOCK_UN, inout $null);
 				@\fclose($fp);
 				return false;
 			}
@@ -1107,7 +1113,7 @@ final class FileSessionModule implements SessionHandlerInterface {
 			$data = $this->cryptoStorage_user_key->encrypt($sessionId, $data);
 			if ($data == "") {
 				throw new \Exception("Session write error: (encrypt error)");
-				@\flock($fp, \LOCK_UN);
+				@\flock($fp, \LOCK_UN, inout $null);
 				@\fclose($fp);
 				return false;
 			}
@@ -1115,7 +1121,7 @@ final class FileSessionModule implements SessionHandlerInterface {
 		
 		$ret = @\fwrite($fp, $data);
 		
-		@\flock($fp, \LOCK_UN);
+		@\flock($fp, \LOCK_UN, inout $null);
 		
 		if ($ret is bool) {
 			@\fclose($fp);
