@@ -372,7 +372,7 @@ namespace HPHP {
 
 		Variant sessionName = String(session_name, CopyString);
 	
-		TypedValue args[1] = { *sessionName.toCell() };
+		TypedValue args[1] = { *sessionName.asTypedValue() };
 		auto ret = Variant::attach(g_context->invokeFuncFew(m_open, obj.get(), nullptr, 1, args));
 
 		if (ret.isBoolean() && ret.toBoolean()) {
@@ -409,7 +409,7 @@ namespace HPHP {
 		const auto& obj = getObject();
 
 		Variant sessionKey = String(key, CopyString);
-		auto ret = Variant::attach(g_context->invokeFuncFew(m_read, obj.get(),nullptr, 1, sessionKey.toCell()));
+		auto ret = Variant::attach(g_context->invokeFuncFew(m_read, obj.get(),nullptr, 1, sessionKey.asTypedValue()));
 
 		if (ret.isString()) {
 			value = ret.toString();
@@ -425,7 +425,7 @@ namespace HPHP {
 
 		Variant sessionKey = String(key, CopyString);
 		Variant sessionVal = value;
-		TypedValue args[2] = { *sessionKey.toCell(), *sessionVal.toCell() };
+		TypedValue args[2] = { *sessionKey.asTypedValue(), *sessionVal.asTypedValue() };
 		auto ret = Variant::attach(g_context->invokeFuncFew(m_write, obj.get(), nullptr, 2, args));
 
 		if (ret.isBoolean() && ret.toBoolean()) {
@@ -440,7 +440,7 @@ namespace HPHP {
 		const auto& obj = getObject();
 
 		Variant sessionKey = String(key, CopyString);
-		auto ret = Variant::attach(	g_context->invokeFuncFew(m_destroy, obj.get(), nullptr, 1, sessionKey.toCell()));
+		auto ret = Variant::attach(	g_context->invokeFuncFew(m_destroy, obj.get(), nullptr, 1, sessionKey.asTypedValue()));
 
 		if (ret.isBoolean() && ret.toBoolean()) {
 			return true;
@@ -454,7 +454,7 @@ namespace HPHP {
 		const auto& obj = getObject();
 
 		Variant maxLifeTime = maxlifetime;
-		auto ret = Variant::attach(g_context->invokeFuncFew(m_gc, obj.get(),nullptr, 1, maxLifeTime.toCell()));
+		auto ret = Variant::attach(g_context->invokeFuncFew(m_gc, obj.get(),nullptr, 1, maxLifeTime.asTypedValue()));
 
 		if (ret.isInteger()) {
 			if (nrdels) {
@@ -713,15 +713,20 @@ namespace HPHP {
 			static const auto s_SID = makeStaticString("SID");
 			auto const handle = lookupCnsHandle(s_SID);
 			if (!handle) {
-				auto name = String{s_SID};
-				auto value = v.toCell();
-				Unit::defCns(name.get(), value);
-			} else {
+				auto name = String{s_SID}.get();
+
+				auto handle = makeCnsHandle(name);
+				always_assert(rds::isHandleBound(handle));
+				rds::initHandle(handle);
 				auto cns = rds::handleToPtr<TypedValue, rds::Mode::NonLocal>(handle);
-				v.setEvalScalar();
 				cns->m_data = v.asTypedValue()->m_data;
 				cns->m_type = v.asTypedValue()->m_type;
-				if (rds::isNormalHandle(handle)) rds::initHandle(handle);
+			} else {
+					auto cns = rds::handleToPtr<TypedValue, rds::Mode::NonLocal>(handle);
+					v.setEvalScalar();
+					cns->m_data = v.asTypedValue()->m_data;
+					cns->m_type = v.asTypedValue()->m_type;
+					if (rds::isNormalHandle(handle)) rds::initHandle(handle);
 			}
 		}
 	}
