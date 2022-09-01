@@ -288,62 +288,6 @@ final class Crypto {
    Updated by Artūras Kaukėnas
 */
 
-
-  /**
-   * Return current cache expire
-   *
-   * @param string $new_cache_expire - If new_cache_expire is given, the
-   *   current cache expire is replaced with new_cache_expire.     Setting
-   *   new_cache_expire is of value only, if session.cache_limiter is set to
-   *   a value different from nocache.
-   *
-   * @return int - Returns the current setting of session.cache_expire. The
-   *   value returned should be read in minutes, defaults to 180.
-   */
-  function session_cache_expire(mixed $new_cache_expire = null): int {
-    $ret = (int) \ini_get('session.cache_expire');
-    if ($new_cache_expire !== null) {
-      $val = (string)$new_cache_expire;
-      \ini_set('session.cache_expire', (int)$val);
-    }
-    return $ret;
-  }
-
-  /**
-   * Get and/or set the current cache limiter
-   *
-   * @param string $cache_limiter - If cache_limiter is specified, the name
-   *   of the current cache limiter is changed to the new value.   Possible
-   *   values    Value Headers sent     public        private_no_expire
-   *    private        nocache
-   *
-   * @return string - Returns the name of the current cache limiter.
-   */
-  function session_cache_limiter(mixed $cache_limiter = null): string {
-    $ret = (string) \ini_get('session.cache_limiter');
-    if ($cache_limiter !== null) {
-      \ini_set('session.cache_limiter', (string) $cache_limiter);
-    }
-    return $ret;
-  }
-
-  /**
-   * Alias of session_write_close()
-   */
-  function session_commit(): void {
-    session_write_close();
-  }
-
-  /**
-   * Decodes session data from a session encoded string
-   *
-   * @param string $data - The encoded data to be stored.
-   *
-   * @return bool -
-   */
-  <<__Native>>
-  function session_decode(string $data): bool;
-
   /**
    * Destroys all data registered to a session
    *
@@ -351,35 +295,6 @@ final class Crypto {
    */
   <<__Native>>
   function session_destroy(): bool;
-
-  /**
-   * Encodes the current session data as a session encoded string
-   *
-   * @return string - Returns the contents of the current session encoded.
-   */
-  <<__Native>>
-  function session_encode(): mixed;
-
-  /**
-   * Get the session cookie parameters
-   *
-   * @return array - Returns an array with the current session cookie
-   *   information, the array contains the following items:    "lifetime" -
-   *   The lifetime of the cookie in seconds.     "path" - The path where
-   *   information is stored.     "domain" - The domain of the cookie.
-   *   "secure" - The cookie should only be sent over secure connections.
-   *   "httponly" - The cookie can only be accessed through the HTTP
-   *   protocol.
-   */
-  function session_get_cookie_params(): array<string, mixed> {
-    return array(
-      'lifetime' => (int) \ini_get('session.cookie_lifetime'),
-      'path'     => (string) \ini_get('session.cookie_path'),
-      'domain'   => (string) \ini_get('session.cookie_domain'),
-      'secure'   => (bool) \ini_get('session.cookie_secure'),
-      'httponly' => (bool) \ini_get('session.cookie_httponly')
-    );
-  }
 
   /**
    * Get current session id
@@ -391,139 +306,13 @@ final class Crypto {
 	function session_id(?string $id = null): string;
 
   /**
-   * Get the current session name
-   * @return string - Returns the name of the current session.
-   */
-	function session_name(mixed $name = null): string {
-		return (string) \ini_get('session.name');
-	}
-
-  /**
-   * Session shutdown function
-   *
-   * @return void -
-   */
-  function session_register_shutdown(): void {
-    register_shutdown_function('session_write_close');
-  }
-
-  /**
-   * Set the session cookie parameters
-   *
-   * @param int|array $lifetime_or_options - Lifetime of the session cookie, defined in
-   *   seconds OR options.
-   * @param string $path - Path on the domain where the cookie will work.
-   *   Use a single slash ('/') for all paths on the domain.
-   * @param string $domain - Cookie domain, for example 'www.php.net'. To
-   *   make cookies visible on all subdomains then the domain must be
-   *   prefixed with a dot like '.php.net'.
-   * @param bool $secure - If TRUE cookie will only be sent over secure
-   *   connections.
-   * @param bool $httponly - If set to TRUE then PHP will attempt to send
-   *   the httponly flag when setting the session cookie.
-   *
-   * @return void -
-   */
-function session_set_cookie_params(
-	mixed $lifetime_or_options,
-	?string $path = null,
-	?string $domain = null,
-	?bool $secure = null,
-	?bool $httponly = null
-): void {
-	$lifetimeF 		= null;
-	$pathF 			= null;
-	$domainF 		= null;
-	$secureF 		= null;
-	$httponlyF 		= null;
-
-	if (\is_object($lifetime_or_options)) {
-		$lifetime_or_options = (array) $lifetime_or_options;
-    }
-
-	if (\is_array($lifetime_or_options)) {
-		if (isset($lifetime_or_options['lifetime'])) {
-			if ($lifetime_or_options['lifetime'] is int) {
-				$lifetimeF = $lifetime_or_options['lifetime'];
-			}
-		}
-
-		if (isset($lifetime_or_options['path'])) {
-			if ($lifetime_or_options['path'] is string) {
-				$pathF = $lifetime_or_options['path'];
-			}
-		}
-
-		if (isset($lifetime_or_options['domain'])) {
-			if ($lifetime_or_options['domain'] is string) {
-				$domainF = $lifetime_or_options['domain'];
-			}
-		}
-
-		if (isset($lifetime_or_options['secure'])) {
-			if ($lifetime_or_options['secure'] is bool) {
-				$secureF = $lifetime_or_options['secure'];
-			}
-		}
-
-		if (isset($lifetime_or_options['httponly'])) {
-			if ($lifetime_or_options['httponly'] is bool) {
-				$httponlyF = $lifetime_or_options['httponly'];
-			}
-		}
-	}
-
-	if ($lifetime_or_options is int) {
-		$lifetimeF = $lifetime_or_options;
-	}
-
-	if ($path is string) {
-		$pathF = $path;
-	}
-
-	if ($domain is string) {
-		$domainF = $domain;
-	}
-
-	if ($secure is bool) {
-		$secureF = $secure;
-	}
-
-	if ($httponly is bool) {
-		$httponlyF = $httponly;
-	}
-
-	if (\ini_get('session.use_cookies')) {
-		if ($lifetimeF !== null) {
-			\ini_set('session.cookie_lifetime', $lifetimeF);
-		}
-
-		if ($pathF !== null) {
-			\ini_set('session.cookie_path', $pathF);
-		}
-
-		if ($domainF !== null) {
-			\ini_set('session.cookie_domain', $domainF);
-		}
-
-		if ($secureF !== null) {
-			\ini_set('session.cookie_secure', $secureF);
-		}
-
-		if ($httponlyF !== null) {
-			\ini_set('session.cookie_httponly', $httponlyF);
-		}
-    }
-}
-
-  /**
    * Start new or resume existing session
    *
    * @return bool - This function returns TRUE if a session was
    *   successfully started, otherwise FALSE.
    */
-  <<__Native>>
-  function session_start(): bool;
+	<<__Native>>
+	function session_start(): bool;
 
   /**
    * Returns the current session status
@@ -532,43 +321,320 @@ function session_set_cookie_params(
    *   PHP_SESSION_NONE if sessions are enabled, but none exists.
    *   PHP_SESSION_ACTIVE if sessions are enabled, and one exists.
    */
-  <<__Native>>
-  function session_status(): int;
+	<<__Native>>
+	function session_status(): int;
 
   /**
    * Free all session variables
    *
    * @return void -
    */
-  <<__Native>>
-  function session_unset(): void;
+	<<__Native>>
+	function session_unset(): void;
 
   /**
    * Write session data and end session
    *
    * @return void -
    */
-  <<__Native>>
-  function session_write_close(): void;
-  
+	<<__Native>>
+	function session_write_close(): void;
+
+	/**
+	* Return current cache expire
+	*
+	* @param string $new_cache_expire - If new_cache_expire is given, the
+	*   current cache expire is replaced with new_cache_expire.     Setting
+	*   new_cache_expire is of value only, if session.cache_limiter is set to
+	*   a value different from nocache.
+	*
+	* @return int - Returns the current setting of session.cache_expire. The
+	*   value returned should be read in minutes, defaults to 180.
+	*/
+	function session_cache_expire(mixed $new_cache_expire = null): int {
+		$ret = (int) \ini_get('session.cache_expire');
+		if ($new_cache_expire !== null) {
+		$val = (string)$new_cache_expire;
+		\ini_set('session.cache_expire', (int)$val);
+		}
+		return $ret;
+	}
+
+	/**
+	* Get and/or set the current cache limiter
+	*
+	* @param string $cache_limiter - If cache_limiter is specified, the name
+	*   of the current cache limiter is changed to the new value.   Possible
+	*   values    Value Headers sent     public        private_no_expire
+	*    private        nocache
+	*
+	* @return string - Returns the name of the current cache limiter.
+	*/
+	function session_cache_limiter(mixed $cache_limiter = null): string {
+		$ret = (string) \ini_get('session.cache_limiter');
+		if ($cache_limiter !== null) {
+			\ini_set('session.cache_limiter', (string) $cache_limiter);
+		}
+		return $ret;
+	}
+
+	/**
+	* Alias of session_write_close()
+	*/
+	function session_commit(): void {
+		session_write_close();
+	}
+
+	/**
+	* Session shutdown function
+	*
+	* @return void -
+	*/
+	function session_register_shutdown(): void {
+		register_shutdown_function('session_write_close');
+	}
+
+	/**
+	* Get the current session name
+	* @return string - Returns the name of the current session.
+	*/
+	function session_name(mixed $name = null): string {
+		return (string) \ini_get('session.name');
+	}
+
+	/**
+	* Set the session cookie parameters
+	*
+	* @param int|array $lifetime_or_options - Lifetime of the session cookie, defined in
+	*   seconds OR options.
+	* @param string $path - Path on the domain where the cookie will work.
+	*   Use a single slash ('/') for all paths on the domain.
+	* @param string $domain - Cookie domain, for example 'www.php.net'. To
+	*   make cookies visible on all subdomains then the domain must be
+	*   prefixed with a dot like '.php.net'.
+	* @param bool $secure - If TRUE cookie will only be sent over secure
+	*   connections.
+	* @param bool $httponly - If set to TRUE then PHP will attempt to send
+	*   the httponly flag when setting the session cookie.
+	*
+	* @return void -
+	*/
+	function session_set_cookie_params(
+		mixed $lifetime_or_options,
+		?string $path = null,
+		?string $domain = null,
+		?bool $secure = null,
+		?bool $httponly = null
+	): void {
+		$lifetimeF 		= null;
+		$pathF 			= null;
+		$domainF 		= null;
+		$secureF 		= null;
+		$httponlyF 		= null;
+
+		if (\is_object($lifetime_or_options)) {
+			$lifetime_or_options = (array) $lifetime_or_options;
+		}
+
+		if (\is_array($lifetime_or_options)) {
+			if (isset($lifetime_or_options['lifetime'])) {
+				if ($lifetime_or_options['lifetime'] is int) {
+					$lifetimeF = $lifetime_or_options['lifetime'];
+				}
+			}
+
+			if (isset($lifetime_or_options['path'])) {
+				if ($lifetime_or_options['path'] is string) {
+					$pathF = $lifetime_or_options['path'];
+				}
+			}
+
+			if (isset($lifetime_or_options['domain'])) {
+				if ($lifetime_or_options['domain'] is string) {
+					$domainF = $lifetime_or_options['domain'];
+				}
+			}
+
+			if (isset($lifetime_or_options['secure'])) {
+				if ($lifetime_or_options['secure'] is bool) {
+					$secureF = $lifetime_or_options['secure'];
+				}
+			}
+
+			if (isset($lifetime_or_options['httponly'])) {
+				if ($lifetime_or_options['httponly'] is bool) {
+					$httponlyF = $lifetime_or_options['httponly'];
+				}
+			}
+		}
+
+		if ($lifetime_or_options is int) {
+			$lifetimeF = $lifetime_or_options;
+		}
+
+		if ($path is string) {
+			$pathF = $path;
+		}
+
+		if ($domain is string) {
+			$domainF = $domain;
+		}
+
+		if ($secure is bool) {
+			$secureF = $secure;
+		}
+
+		if ($httponly is bool) {
+			$httponlyF = $httponly;
+		}
+
+		if (\ini_get('session.use_cookies')) {
+			if ($lifetimeF !== null) {
+				\ini_set('session.cookie_lifetime', $lifetimeF);
+			}
+
+			if ($pathF !== null) {
+				\ini_set('session.cookie_path', $pathF);
+			}
+
+			if ($domainF !== null) {
+				\ini_set('session.cookie_domain', $domainF);
+			}
+
+			if ($secureF !== null) {
+				\ini_set('session.cookie_secure', $secureF);
+			}
+
+			if ($httponlyF !== null) {
+				\ini_set('session.cookie_httponly', $httponlyF);
+			}
+		}
+	}
+
+	/**
+	* Decodes session data from a session encoded string
+	*
+	* @param string $data - The encoded data to be stored.
+	*
+	* @return bool -
+	*/
+	function session_decode(string $data): bool {
+		try {
+			$RES = \json_decode($data, true);
+		} catch (\Exception $e) {
+			return false;
+		}
+
+		\HH\global_set("_SESSION", $RES);
+
+		return true;
+	}
+
+	/**
+	* Encodes the current session data as a session encoded string
+	*
+	* @return string - Returns the contents of the current session encoded.
+	*/
+
+	function session_encode(): string {
+		return \json_encode(\session_get());		
+	}
+
+	/**
+	* Get the session cookie parameters
+	*
+	* @return array - Returns an array with the current session cookie
+	*   information, the array contains the following items:    "lifetime" -
+	*   The lifetime of the cookie in seconds.     "path" - The path where
+	*   information is stored.     "domain" - The domain of the cookie.
+	*   "secure" - The cookie should only be sent over secure connections.
+	*   "httponly" - The cookie can only be accessed through the HTTP
+	*   protocol.
+	*/
+	function session_get_cookie_params(): array<string, mixed> {
+		return array(
+			'lifetime' => (int) \ini_get('session.cookie_lifetime'),
+			'path'     => (string) \ini_get('session.cookie_path'),
+			'domain'   => (string) \ini_get('session.cookie_domain'),
+			'secure'   => (bool) \ini_get('session.cookie_secure'),
+			'httponly' => (bool) \ini_get('session.cookie_httponly')
+		);
+	}
+
+	/**
+	* Set session data by key
+	*
+	* @param string $key - key.
+	* @param mixed $value - value.
+	*
+	* @return void 
+	*/
 	function session_set(string $key, mixed $value) : void {
 		$session_var = \HH\global_get("_SESSION");
+		if (!isset($session_var)) {
+			$session_var = array();
+		}
+
 		$session_var[$key] = $value;
 		\HH\global_set("_SESSION", $session_var);
 	}
-  
-	function session_get($key) : mixed {
+
+	/**
+	* Get session data by key
+	*
+	* @param mixed $key.
+	*
+	* @return mixed - Returns required value or in case when key is null - full session array
+	*/
+	function session_get(mixed $key = null) : mixed {
+		if ($key === null) {
+			if (!\HH\global_isset("_SESSION")) {
+				return array();
+			}
+
+			return \HH\global_get("_SESSION");
+		}
+
 		$session_var = \HH\global_get("_SESSION");
+		if (!isset($session_var)) {
+			$session_var = array();
+		}
+
 		return $session_var[$key];
 	}
-	
+
+	/**
+	* Check if session array element exists
+	*
+	* @param mixed $key.
+	*
+	* @return bool
+	*/
 	function session_isset($key) : bool {
-		return isset(\HH\global_get("_SESSION")[$key]);
+		$session_var = \HH\global_get("_SESSION");
+		if (!isset($session_var)) {
+			$session_var = array();
+		}
+
+		return isset($session_var[$key]);
 	}
-	
+
+	/**
+	* Remove session array element exists
+	*
+	* @param mixed $key.
+	*
+	* @return void
+	*/
 	function session_remove($key) : void {
 		$session_var = \HH\global_get("_SESSION");
-		unset($session_var[$key]);
+		if (!isset($session_var)) {
+			$session_var = array();
+		}
+		
+		if (isset($session_var[$key])) {
+			unset($session_var[$key]);
+		}
 		\HH\global_set("_SESSION", $session_var);
 	}
 
@@ -784,6 +850,8 @@ final class MemcacheSessionModule implements SessionHandlerInterface {
 				return "";
 			}
 		}
+
+		\session_decode($data);
 		return $data;
 	}
 
@@ -796,9 +864,9 @@ final class MemcacheSessionModule implements SessionHandlerInterface {
 			throw new \Exception("Session write error: (memcache not connected. SessionID:".$sessionId.")");
 			return false;
 		}
-		
-		$data = (string) $data;
-		
+
+		$data = \session_encode((string) $data);
+
 		if ($this->use_crypto_storage) {
 			$data = $this->cryptoStorage->encrypt($sessionId, $data);
 			if ($data == "") {
@@ -1006,15 +1074,15 @@ final class FileSessionModule implements SessionHandlerInterface {
 		if ($this->use_crypto_storage) {
 			$this->cryptoStorage = new Crypto($this->crypto_secret);
 		}
-		
+
 		if ($this->use_crypto_storage_user_key) {
 			$this->cryptoStorage_user_key = new Crypto($this->crypto_secret_user_key);
 		}
-	
+
 		$this->prepared = true;
-		
+
 		$this->gc_maxlifetime = (int) \ini_get('session.gc_maxlifetime');
-		
+
 		return $this->prepared;
 	}
 
@@ -1022,32 +1090,32 @@ final class FileSessionModule implements SessionHandlerInterface {
 		if (!$this->openCalled) {
 			$this->open($this->_FILE_PATCH, $sessionId);
 		}
-		
+
 		if (!$this->prepared) {
 			throw new \Exception("Session read error: (Session not prepared. SessionID:".$sessionId.")");
 			return false;
 		}
-		
+
 		if ($sessionId == "") {
 			throw new \Exception("Session read error: (Session not prepared. SessionID:".$sessionId.")");
 			return false;
 		}
-		
+
 		if (!\file_exists($this->_FILE_PATCH.$sessionId)) {
 			return "";
 		}
-		
+
 		try {
 			$data = \file_get_contents($this->_FILE_PATCH.$sessionId);
 		} catch (\Exception $e) {
 				throw new \Exception("Session read error: (File read error. SessionID:".$sessionId.")");
 				return false;
 		}
-		
+
 		if ($data is bool) {
 			return "";
 		}
-		
+
 		if ($this->use_crypto_storage) {
 			$data = $this->cryptoStorage->decrypt($sessionId, $data);
 			if ($data == "") {
@@ -1056,6 +1124,7 @@ final class FileSessionModule implements SessionHandlerInterface {
 			}
 			
 		}
+
 		if ($this->use_crypto_storage_user_key) {
 			$data = $this->cryptoStorage_user_key->decrypt($sessionId, $data);
 			if ($data == "") {
@@ -1063,6 +1132,8 @@ final class FileSessionModule implements SessionHandlerInterface {
 				return "";
 			}
 		}
+
+		\session_decode($data);
 		return $data;
 	}
 
@@ -1096,8 +1167,8 @@ final class FileSessionModule implements SessionHandlerInterface {
 		$null = null;
 		@\flock($fp, \LOCK_EX, inout $null);
 
-		$data = (string) $data;
-		
+		$data = \session_encode((string) $data);
+
 		if ($this->use_crypto_storage) {
 			$data = $this->cryptoStorage->encrypt($sessionId, $data);
 			if ($data == "") {

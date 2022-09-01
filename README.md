@@ -1,7 +1,7 @@
 # HHVM ext_session (Beta)
 HHVM 4.3 modified ext_session for HHVM without ext_session.
 
-### Tested with HHVM 4.32
+### Tested with HHVM 4.56
 
 ## License
 
@@ -134,7 +134,7 @@ session_write_close
 #### new functions to get/set $_SESSION global variable data
 ```
 session_set(string $key, mixed $value) : void
-session_get(string $key) : mixed
+session_get(mixed $key = null) : mixed
 session_isset(string $key) : bool
 session_remove(string $key) : void
 ```

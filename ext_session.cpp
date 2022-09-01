@@ -17,40 +17,28 @@
    Updated by Artūras Kaukėnas
 */
 
-
 #include "ext_session.h"
 
 #include <string>
 
 #include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <vector>
 
 #include <folly/String.h>
 #include <folly/portability/Dirent.h>
-#include <folly/portability/SysFile.h>
 #include <folly/portability/SysTime.h>
 
-#include "hphp/util/lock.h"
 #include "hphp/util/logger.h"
 #include "hphp/util/compatibility.h"
 
-#include "hphp/runtime/base/array-iterator.h"
 #include "hphp/runtime/base/builtin-functions.h"
 #include "hphp/runtime/base/comparisons.h"
 #include "hphp/runtime/base/datetime.h"
-#include "hphp/runtime/base/file.h"
 #include "hphp/runtime/base/ini-setting.h"
 #include "hphp/runtime/base/object-data.h"
 #include "hphp/runtime/base/php-globals.h"
-//#include "hphp/runtime/base/rds-local.h"
 #include "hphp/runtime/base/string-buffer.h"
-#include "hphp/runtime/base/tv-refcount.h"
-#include "hphp/runtime/base/variable-serializer.h"
-#include "hphp/runtime/base/variable-unserializer.h"
-//#include "hphp/runtime/base/zend-math.h" //HHVM 4.8
-#include "hphp/zend/zend-math.h" //HHVM 4.32
+#include "hphp/zend/zend-math.h"
 
 #include "hphp/runtime/ext/extension-registry.h"
 #include "hphp/runtime/ext/hash/ext_hash.h"
@@ -58,7 +46,6 @@
 #include "hphp/runtime/ext/std/ext_std_misc.h"
 #include "hphp/runtime/ext/std/ext_std_options.h"
 
-#include "hphp/runtime/vm/jit/translator-inline.h"
 #include "hphp/runtime/vm/interp-helpers.h"
 #include "hphp/runtime/vm/method-lookup.h"
 
@@ -73,7 +60,6 @@ namespace HPHP {
 	///////////////////////////////////////////////////////////////////////////////
 	// global data
 
-	struct SessionSerializer;
 	struct Session {
 		enum Status {
 			Disabled,
@@ -117,7 +103,6 @@ namespace HPHP {
 		int64_t				cache_expire{0};
 
 		Object 				ps_session_handler;
-		SessionSerializer* 	serializer;
 
 		bool 				invalid_session_id{false};
 		bool 				auto_start{false};
@@ -480,76 +465,6 @@ namespace HPHP {
 
 
 	///////////////////////////////////////////////////////////////////////////////
-	// session serializers
-
-
-	#define PS_DELIMITER '|'
-	#define PS_UNDEF_MARKER '!'
-
-	struct SessionSerializer {
-		String encode() {
-			StringBuffer buf;
-			VariableSerializer vs(VariableSerializer::Type::Serialize);
-			for (ArrayIter iter(php_global(s__SESSION).toArray()); iter; ++iter) {
-				Variant key = iter.first();
-				if (key.isString()) {
-					String skey = key.toString();
-					buf.append(skey);
-					if (skey.find(PS_DELIMITER) >= 0 || skey.find(PS_UNDEF_MARKER) >= 0) {
-						return String();
-					}
-					buf.append(PS_DELIMITER);
-					buf.append(
-						vs.serialize(
-							iter.second(), 
-							true, /* ret */ 
-							true /* keepCount */ 
-						)
-					);
-				} else {
-					raise_notice("Skipping numeric key %" PRId64, key.toInt64());
-				}
-			}
-			return buf.detach();
-		}
-		
-		bool decode(const String& value) {
-			const char *p = value.data();
-			const char *endptr = value.data() + value.size();
-			VariableUnserializer vu(nullptr, 0, VariableUnserializer::Type::Serialize);
-			while (p < endptr) {
-				const char *q = p;
-				while (*q != PS_DELIMITER) {
-					if (++q >= endptr) return true;
-				}
-				int has_value;
-				if (p[0] == PS_UNDEF_MARKER) {
-					p++;
-					has_value = 0;
-				} else {
-						has_value = 1;
-				}
-				String key(p, q - p, CopyString);
-				q++;
-				if (has_value) {
-					vu.set(q, endptr);
-					try {
-						auto sess = php_global_exchange(s__SESSION, init_null());
-						forceToArray(sess).set(key, vu.unserialize());
-						php_global_set(s__SESSION, std::move(sess));
-						q = vu.head();
-					} catch (const ResourceExceededException&) {
-						throw;
-					} catch (const Exception&) {
-					}
-				}
-				p = q;
-			}
-			return true;
-		}
-	};
-
-	///////////////////////////////////////////////////////////////////////////////
 
 	static bool session_check_active_state() {
 		if (s_session->session_status == Session::Active) {
@@ -599,17 +514,6 @@ namespace HPHP {
 		return retval;
 	}
 
-	static String php_session_encode() {
-		return s_session->serializer->encode();
-	}
-
-	static void php_session_decode(const String& value) {
-		if (!s_session->serializer->decode(value)) {
-			php_session_destroy();
-			raise_warning("Failed to decode session object. Session has been destroyed");
-		}
-	}
-
 	static void php_session_initialize() {
 		/* check session name for invalid characters */
 		if (strpbrk(s_session->id.data(), "\r\n\t <>'\"\\")) {
@@ -642,18 +546,14 @@ namespace HPHP {
 		php_global_set(s__SESSION, Variant{staticEmptyArray()});
 
 		String value;
-		if (s_session->mod->read(s_session->id.data(), value)) {
-			php_session_decode(value);
-		}
+		s_session->mod->read(s_session->id.data(), value);
 	}
 
 	static void php_session_save_current_state() {
 		bool ret = false;
+		String value;
 		if (mod_is_open()) {
-			String value = php_session_encode();
-			if (!value.isNull()) {
-				ret = s_session->mod->write(s_session->id.data(), value);
-			}
+			ret = s_session->mod->write(s_session->id.data(), value);
 		}
 		if (!ret) {
 			raise_warning(
@@ -882,22 +782,6 @@ namespace HPHP {
 		return ret;
 	}
 
-	Variant HHVM_FUNCTION(session_encode) {
-		String ret = php_session_encode();
-		if (ret.isNull()) {
-			return false;
-		}
-		return ret;
-	}
-
-	bool HHVM_FUNCTION(session_decode, const String& data) {
-		if (s_session->session_status != Session::None) {
-			php_session_decode(data);
-			return true;
-		}
-		return false;
-	}
-
 	const StaticString
 		s_REQUEST_URI("REQUEST_URI"),
 		s_HTTP_REFERER("HTTP_REFERER");
@@ -1049,8 +933,6 @@ namespace HPHP {
 
 			HHVM_FE(session_status);
 			HHVM_FE(session_id);
-			HHVM_FE(session_encode);
-			HHVM_FE(session_decode);
 			HHVM_FE(session_start);
 			HHVM_FE(session_destroy);
 			HHVM_FE(session_unset);
